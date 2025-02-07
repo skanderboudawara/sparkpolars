@@ -1,0 +1,17 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gitleaks:
+    uses: ./.github/workflows/gitleaks.yml
+
+  linting:
+    uses: ./.github/workflows/linting.yml
+    needs: gitleaks
+
+  test:
+    uses: ./.github/workflows/test.yml
+    needs: linting

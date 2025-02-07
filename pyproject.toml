@@ -1,0 +1,155 @@
+[build-system]
+requires = ["setuptools", "wheel", "setuptools-scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "sparkpl"
+version = "0.0.1"
+description = "Convert Spark to Polars and Vice Versa"
+readme = "README.md"
+authors = [{ name = "Skander Boudawara" }]
+classifiers = [
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+
+requires-python = ">=3.10"
+dependencies = []
+
+
+[project.optional-dependencies]
+test = ["pytest-cov >= 6.0.0", "pytest >= 6.0.0"]
+
+lint = [
+    "types-PyYAML >= 6.0.0",
+    "pre-commit",
+    "flake8 >= 7.0.0",
+    "flake8-docstrings >= 1.6.0",
+    "flake8-rst-docstrings >= 0.3.0",
+    "black >= 24.10.0",
+    "ruff >= 0.9.0",
+]
+
+dev = [
+    "pyspark>=3.3.0",
+    "polars>=1.0",
+]
+
+[tool.black]
+line-length = 100
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["*/__init__.py", "*/test_*", "*/_exceptions.py", "*/_logger.py"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
+
+fail_under = 100
+
+[tool.pytest.ini_options]
+addopts = ["--doctest-modules", "-vv", "-p", "no:warnings", "--tb=short"]
+
+pythonpath = ["src"]
+testpaths = ["tests"]
+xfail_strict = true
+filterwarnings = ["error"]
+python_files = "test_*.py"
+log_cli = true
+log_cli_level = "INFO"
+log_level = "INFO"
+log_format = "%(asctime)s %(levelname)s %(name)s %(message)s"
+log_date_format = "%Y-%m-%d %H:%M:%S"
+
+[tool.ruff]
+lint.select = ["ALL"]
+
+lint.ignore = [
+    "ANN401",
+    "PYI041",
+    "D200",
+    "D205",
+    "D212",
+    "D107",
+    "D203",
+    "D104",
+    "D401",
+    "D404",
+    "PLC2701",
+    "DOC201",
+    "DOC501",
+    "PLR2004",
+    "N802",
+    "CPY001",
+    "PLR0911",
+]
+
+
+lint.fixable = ["ALL"]
+lint.exclude = ["*conftest.py", "docs*"]
+output-format = "grouped"
+preview = true
+fix = true
+show-fixes = true
+line-length = 100
+
+[tool.ruff.format]
+indent-style = "space"
+quote-style = "double"
+line-ending = "auto"
+
+[tool.ruff.lint.flake8-quotes]
+docstring-quotes = "double"
+inline-quotes = "double"
+multiline-quotes = "double"
+
+[tool.ruff.lint.isort]
+split-on-trailing-comma = true
+default-section = "third-party"
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "local-folder",
+]
+from-first = false
+lines-between-types = 0
+known-third-party = ["pyspark"]
+known-local-folder = ["src"]
+
+[tool.ruff.lint.per-file-ignores]
+"*bin*" = ["INP001"]
+"test_*.py" = [
+    "ANN001",
+    "ANN002",
+    "ANN003",
+    "ANN201",
+    "ANN202",
+    "ANN204",
+    "ARG001",
+    "ARG002",
+    "E501",
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D106",
+    "E203",
+    "E202",
+    "E271",
+    "E241",
+    "S101",
+    "DTZ001",
+    "PLR2004",
+    "PLR6301",
+    "SLF001",
+    "PLR0913",
+    "PLR0917",
+    "N812",
+]
