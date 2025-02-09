@@ -86,7 +86,7 @@ def spark_df(spark_session, schema_spark, spark_data):
         schema=schema_spark,
         data = spark_data
     )
-
+    
     return df
 
 @pytest.fixture()

@@ -33,13 +33,14 @@ def test_spark_to_polars_using_arrow(spark_session, spark_df, polars_df):
     )
     assert_frame_equal(pl_data, polars_df)
 
+
 def test_spark_to_polars_using_pandas(spark_session, spark_df, polars_df):
     pl_data = toPolars(
-        spark_df.drop("cin","address"),  # Struct and Map types are not supported in pandas
+        spark_df.drop("cin", "address"),  # Struct and Map types are not supported in pandas
         lazy=False,
         mode=ModeMethod.PANDAS,
     )
-    assert_frame_equal(pl_data, polars_df.drop("cin","address"))
+    assert_frame_equal(pl_data, polars_df.drop("cin", "address"))
 
 
 def test_polars_to_spark_using_pandas(spark_session, spark_df, polars_df):
