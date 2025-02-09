@@ -39,13 +39,13 @@ Typical conversions between Spark and Polars often involve an intermediate Panda
 
 ## Features
 
-- Convert a Spark DataFrame to Polars DataFrame or LazyFrame
-- Consistency in schema conversion: ensures `LongType` stays as `Int64` instead of being incorrectly converted to `Int32` by Pandas.
+- Convert a Spark DataFrame to a Polars DataFrame or LazyFrame
+- Ensures schema consistency: preserves `LongType` as `Int64` instead of mistakenly converting to `Int32`
 - Three conversion modes: `NATIVE`, `ARROW`, `PANDAS`
-- `NATIVE` mode guarantees the conversion of `MapType`, `StructType`, and nested `ArrayType`
-- `ARROW` and `PANDAS` modes come with limitations when handling complex types
-- Use `Config` to specify columns for conversion from Polars `list(struct)` to Spark `MapType`
-- Use `Config` to specify `time_zone` and `time_unit` for Polars `Datetime`
+- `NATIVE` mode properly converts `MapType`, `StructType`, and nested `ArrayType`
+- `ARROW` and `PANDAS` modes may have limitations with complex types
+- Configurable conversion settings for Polars `list(struct)` to Spark `MapType`
+- Timezone and time unit customization for Polars `Datetime`
 
 ## Usage
 
@@ -118,40 +118,41 @@ polars_df = df.toPolars(config=conf)
 
 ## Known Limitations
 
-### JVM Timezone:
+### JVM Timezone Discrepancy
 
-The JVM Timezone can be different from the Spark TimeZone.
+Spark timestamps are collected via the JVM, which may differ from Spark’s timezone settings. If issues arise, verify the JVM timezone.
 
-When collecting data to memory, the Spark data will be collected through the JVM and convert all the `TimestampType` to JVM timezone. If there is any discrepancy, then you should verify the timezone of your JVM.
+### Memory Constraints
 
-### Memory:
+Collecting large datasets into memory can exceed available driver memory, leading to failures. (as for pandas/arrow)
 
-As with using `pandas` or `collect`, collecting Spark data to memory comes with its known limitations. If the data collected exceeds the Driver Memory, then you will have issues.
+### Handling `MapType`:
 
-### MapType:
-
-The main reason for this library's existence is to handle MapType.
 
 #### From Spark to Polars
 If you have in Spark:
 
 Type: `StructField("example", MapType(StringType(), IntegerType()))`
+
 Data:  `{"a": 1, "b": 2}`
 
 Then it will become in Polars:
 
 Type: `{"example": List(Struct("key": String, "value": Int32))}`
+
 Data: `[{"key": "a", "value": 1}, {"key": "b", "value": 2}]`
 
 #### From Polars to Spark
 If you have in Polars:
 
 Type: `{"example": List(Struct("key": String, "value": Int32))}`
+
 Data: `[{"key": "a", "value": 1}, {"key": "b", "value": 2}]`
 
 Then it will become in Spark without specifying any config (Default Behavior):
 
 Type: `StructField("example", ArrayType(StructType(StructField("key", StringType())), StructField("value", IntegerType())))`
+
 Data: `[{"key": "a", "value": 1}, {"key": "b", "value": 2}]`
 
 If you want this data to be converted to MapType:
@@ -162,7 +163,9 @@ conf = Config(
     map_elements=["example"]
 )
 ```
+
 Type: `StructField("example", MapType(StringType(), IntegerType()))`
+
 Data:  `{"a": 1, "b": 2}`
 
 ## License
