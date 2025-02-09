@@ -6,9 +6,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sparkpolars"
 version = "0.0.1"
-description = "Convert Spark to Polars and Vice Versa"
-readme = "README.md"
+description = "Conversion between PySpark and Polars DataFrames"
+readme = {file = 'README.md', content-type='text/markdown'}
+license = {file = 'LICENSE.md'}
 authors = [{ name = "Skander Boudawara" }]
+keywords = ['pyspark', 'polars', 'conversion', 'spark-to-polars', 'polars-to-spark']
 classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
