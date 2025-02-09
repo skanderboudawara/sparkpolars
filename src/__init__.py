@@ -7,10 +7,11 @@ from polars import (
 from pyspark.sql import DataFrame as SparkDataFrame
 
 from .config import Config
-from .sparkpolars import to_spark, toPolars
+from .sparkpolars import ModeMethod, to_spark, toPolars
 
 __all__ = [
     "Config",
+    "ModeMethod",
     "toPolars",
     "to_spark",
 ]
