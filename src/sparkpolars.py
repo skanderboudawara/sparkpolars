@@ -9,13 +9,16 @@ from polars import LazyFrame as PolarsLazyFrame
 from pyspark.sql import DataFrame as SparkDataFrame
 from pyspark.sql import SparkSession
 
-from _importlib_utils import check_version_and_module
-from _utils import (
+from _from_polars_to_spark import (
     _convert_schema_polars_to_spark,
-    _convert_schema_spark_to_polars,
     _polars_dict_to_row,
+)
+from _from_spark_to_polars import (
+    _convert_schema_spark_to_polars,
+    _get_time_zone,
     _spark_row_as_dict,
 )
+from _importlib_utils import check_version_and_module
 from config import Config
 
 
@@ -55,20 +58,41 @@ def toPolars(
     """
     check_version_and_module("pyspark", "3.3.0")
     check_version_and_module("polars", "1.0.0")
-    polars_schema = _convert_schema_spark_to_polars(self.schema.fields, config)
+    tz = _get_time_zone(self)
+    polars_frame = None
+    polars_schema = _convert_schema_spark_to_polars(self.schema.fields, config, tz)
+
     if mode == ModeMethod.NATIVE:
         polars_data = [_spark_row_as_dict(row, config) for row in self.collect()]
-        if lazy:
-            return PolarsLazyFrame(schema_overrides=polars_schema, data=polars_data, strict=False)
-        return PolarsDataFrame(schema_overrides=polars_schema, data=polars_data, strict=False)
+        polars_frame = PolarsDataFrame(
+            schema_overrides=polars_schema,
+            data=polars_data,
+            strict=False,
+        )
+
+    if mode == ModeMethod.ARROW:
+        check_version_and_module("pyarrow", "1.0.0")
+        from polars import from_arrow
+        from pyarrow import Table
+
+        self.sparkSession.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
+        polars_frame = from_arrow(
+            Table.from_batches(self._collect_as_arrow()),
+            schema_overrides=polars_schema,
+        )
+
     if mode == ModeMethod.PANDAS:
         check_version_and_module("pandas", "1.0.0")
-        pandas_dataframe = self.toPandas()
-        if lazy:
-            return PolarsLazyFrame.from_pandas(pandas_dataframe, schema_overrides=polars_schema)
-        return PolarsDataFrame.from_pandas(pandas_dataframe, schema_overrides=polars_schema)
-    msg = "Method not implemented."
-    raise NotImplementedError(msg)
+        from polars import from_pandas
+
+        polars_frame = from_pandas(self.toPandas(), schema_overrides=polars_schema)
+
+    if polars_frame is None:
+        msg = "Method not implemented."
+        raise NotImplementedError(msg)
+    if lazy:
+        return polars_frame.lazy()
+    return polars_frame
 
 
 def to_spark(
@@ -98,12 +122,21 @@ def to_spark(
     if isinstance(self, PolarsLazyFrame):
         self = self.collect()
     spark_schema = _convert_schema_polars_to_spark(self.schema, config)
+
     if mode == ModeMethod.NATIVE:
         spark_data = [_polars_dict_to_row(row, config) for row in self.to_dicts()]
         return spark.createDataFrame(data=spark_data, schema=spark_schema)
+
     if mode == ModeMethod.PANDAS:
         check_version_and_module("pandas", "1.0.0")
-        self.to_pandas()
+        return spark.createDataFrame(self.to_pandas(), schema=spark_schema)
+
+    if mode == ModeMethod.ARROW:
+        spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
+        check_version_and_module("pandas", "1.0.0")
+        check_version_and_module("pyarrow", "1.0.0")
+        data = self.to_arrow()
+        return spark.createDataFrame(data.to_pandas(), schema=spark_schema)
 
     msg = "Method not implemented."
     raise NotImplementedError(msg)

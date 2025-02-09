@@ -1,10 +1,10 @@
-import re
 
 import polars as pl
 import pyspark.sql.types as T
 import pytest
 
-from src._utils import _type_convert_polars_to_spark, _type_convert_pyspark_to_polars
+from src._from_polars_to_spark import _type_convert_polars_to_spark
+from src._from_spark_to_polars import _type_convert_pyspark_to_polars
 from src.config import Config
 
 
@@ -21,7 +21,7 @@ from src.config import Config
     (T.TimestampType(), pl.Datetime),
     (T.ArrayType(T.StringType()), pl.List(pl.String)),
     (T.ArrayType(T.ArrayType(T.StringType())), pl.List(pl.List(pl.String))),
-    (T.MapType(T.StringType(), T.StringType()), pl.Object()),
+    (T.MapType(T.StringType(), T.StringType()), pl.List(pl.Struct({"key": pl.String, "value": pl.String}))),
     (T.ArrayType(T.ArrayType(T.ArrayType(T.IntegerType()))), pl.List(pl.List(pl.List(pl.Int32)))),
     (T.StructType([T.StructField("street", T.StringType()), T.StructField("city", T.StringType()), T.StructField("state", T.StringType()), T.StructField("zip", T.LongType())]), pl.Struct({"street": pl.String, "city": pl.String, "state": pl.String, "zip": pl.Int64})),
     (T.StructType([T.StructField("street", T.StringType()), T.StructField("city", T.StringType()), T.StructField("state", T.ArrayType(T.ArrayType(T.StringType()))), T.StructField("zip", T.LongType())]), pl.Struct({"street": pl.String, "city": pl.String, "state": pl.List(pl.List(pl.String)), "zip": pl.Int64})),
@@ -37,7 +37,7 @@ def test__type_convert_pyspark_to_polars_unknown():
 
 def test__test_convert_spark_to_polars_datetime():
     assert _type_convert_pyspark_to_polars(T.TimestampType(), Config(time_unit="ns")) == pl.Datetime("ns")
-    assert _type_convert_pyspark_to_polars(T.TimestampType(), Config(time_zone="Africa/Tunis")) == pl.Datetime(time_zone="Africa/Tunis")
+    assert _type_convert_pyspark_to_polars(T.TimestampType(), tz="Africa/Tunis") == pl.Datetime(time_zone="Africa/Tunis")
 
 
 @pytest.mark.parametrize(("is_map", "polar_type", "expected_spark_type"), [
@@ -56,7 +56,7 @@ def test__test_convert_spark_to_polars_datetime():
     (False, pl.List(pl.List(pl.List(pl.Int32))), T.ArrayType(T.ArrayType(T.ArrayType(T.IntegerType())))),
     (None , pl.Struct({"street": pl.String, "city": pl.String, "state": pl.String, "zip": pl.Int64}), T.StructType([T.StructField("street", T.StringType()), T.StructField("city", T.StringType()), T.StructField("state", T.StringType()), T.StructField("zip", T.LongType())])),
     (False, pl.Struct({"street": pl.String, "city": pl.String, "state": pl.List(pl.List(pl.String)), "zip": pl.Int64}), T.StructType([T.StructField("street", T.StringType()), T.StructField("city", T.StringType()), T.StructField("state", T.ArrayType(T.ArrayType(T.StringType()))), T.StructField("zip", T.LongType())])),
-    (True , pl.Struct({"street": pl.String, "city": pl.String, "state": pl.String, "zip": pl.String}), T.MapType(T.StringType(), T.StringType())),
+    (True , pl.List(pl.Struct({"key": pl.String, "value": pl.String})), T.MapType(T.StringType(), T.StringType())),
 ])
 def test__type_convert_polars_to_spark(is_map, polar_type, expected_spark_type):
     assert _type_convert_polars_to_spark(polar_type, is_map=is_map) == expected_spark_type
@@ -65,6 +65,15 @@ def test__type_convert_polars_to_spark(is_map, polar_type, expected_spark_type):
 def test__type_convert_polars_to_spark_unknown():
     with pytest.raises(ValueError, match="Unsupported type: 'unknown'"):
         _type_convert_polars_to_spark("unknown")
-    polar_type = pl.Struct({"street": pl.String, "city": pl.String, "state": pl.String, "zip": pl.Int64})
-    with pytest.raises(ValueError, match=re.escape("Multiple Types found we cannot convert to MapType: got")):
+    polar_type = pl.List(pl.Struct({"pey": pl.String, "value": pl.String}))
+    with pytest.raises(ValueError, match=r"Only types List\(Struct\(key: Type, value: Type\)\) are supported for maps."):
+        _type_convert_polars_to_spark(polar_type, is_map=True)
+    polar_type = pl.List(pl.Struct({"key": pl.String, "falue": pl.String}))
+    with pytest.raises(ValueError, match=r"Only types List\(Struct\(key: Type, value: Type\)\) are supported for maps."):
+        _type_convert_polars_to_spark(polar_type, is_map=True)
+    polar_type = pl.List(pl.Struct({"key": pl.String, "value": pl.String, "another": pl.String}))
+    with pytest.raises(ValueError, match=r"Only types List\(Struct\(key: Type, value: Type\)\) are supported for maps."):
+        _type_convert_polars_to_spark(polar_type, is_map=True)
+    polar_type = pl.List(pl.List(pl.Int32))
+    with pytest.raises(ValueError, match=r"Only types List\(Struct\(key: Type, value: Type\)\) are supported for maps."):
         _type_convert_polars_to_spark(polar_type, is_map=True)

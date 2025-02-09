@@ -15,7 +15,6 @@ class Config:  # pragma: no cover
         self,
         *,
         map_elements: list | str | None = None,
-        time_zone: str | None = None,
         time_unit: Literal["ns", "us", "ms"] = "us",
     ) -> None:
         """
@@ -34,32 +33,8 @@ class Config:  # pragma: no cover
         self._check_map_elements(map_elements)
         self._map_elements = map_elements
 
-        self._check_time_zone(time_zone)
-        self._time_zone = time_zone
-
         self._check_time_unit(time_unit)
         self._time_unit = time_unit
-
-    @property
-    def time_zone(self) -> str | None:
-        """
-        Property to get the time zone.
-
-        :return: The time zone.
-        """
-        return self._time_zone
-
-    @time_zone.setter
-    def time_zone(self, value: str) -> None:
-        """
-        The time zone to set.
-
-        :param value: The time zone to set.
-
-        :return: None
-        """
-        self._check_time_zone(value)
-        self._time_zone = value
 
     @property
     def time_unit(self) -> Literal["ns", "us", "ms"]:
