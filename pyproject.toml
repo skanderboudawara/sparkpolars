@@ -22,6 +22,10 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = []
 
+[project.urls] # Optional
+"Homepage" = "https://pypi.org/project/sparkpolars/"
+"Bug Reports" = "https://github.com/skanderboudawara/sparkpolars/issues"
+"Source" = "https://github.com/skanderboudawara/sparkpolars"
 
 [project.optional-dependencies]
 test = ["pytest-cov >= 6.0.0", "pytest >= 6.0.0"]
