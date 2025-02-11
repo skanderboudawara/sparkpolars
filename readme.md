@@ -5,7 +5,9 @@
 ## Installation
 
 ```sh
-pip install sparkpolars  # Waiting for the first release
+pip install sparkpolars
+# or
+conda install skandev::sparkpolars
 ```
 
 ## Requirements
