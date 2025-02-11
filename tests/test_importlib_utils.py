@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-from sparkpolars._importlib_utils import check_version_and_module
+from src.sparkpolars._importlib_utils import check_version_and_module
 
 
 def test_importlib_utils():

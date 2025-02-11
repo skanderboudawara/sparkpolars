@@ -94,6 +94,7 @@ lint.ignore = [
     "PLC2701",
     "DOC201",
     "DOC501",
+    "PD901",
     "PLR2004",
     "N802",
     "CPY001",

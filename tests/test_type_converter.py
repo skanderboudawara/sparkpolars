@@ -3,9 +3,9 @@ import polars as pl
 import pyspark.sql.types as T
 import pytest
 
-from sparkpolars._from_polars_to_spark import _type_convert_polars_to_spark
-from sparkpolars._from_spark_to_polars import _type_convert_pyspark_to_polars
-from sparkpolars.config import Config
+from src.sparkpolars._from_polars_to_spark import _type_convert_polars_to_spark
+from src.sparkpolars._from_spark_to_polars import _type_convert_pyspark_to_polars
+from src.sparkpolars.config import Config
 
 
 @pytest.mark.parametrize(("pyspark_type", "expected_polars_type"), [
