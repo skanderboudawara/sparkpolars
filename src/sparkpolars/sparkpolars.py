@@ -64,11 +64,12 @@ def toPolars(
 
     if mode == ModeMethod.NATIVE:
         polars_data = [_spark_row_as_dict(row, config) for row in self.collect()]
-        polars_frame = PolarsDataFrame(
-            schema_overrides=polars_schema,
-            data=polars_data,
-            strict=False,
-        )
+        frame_kwargs = {
+            "schema_overrides" if polars_data else "schema": polars_schema,
+            "data": polars_data,
+            "strict": False,
+        }
+        polars_frame = PolarsDataFrame(**frame_kwargs)
 
     if mode == ModeMethod.ARROW:
         check_version_and_module("pyarrow", "1.0.0")
