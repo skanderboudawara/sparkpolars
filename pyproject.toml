@@ -9,21 +9,35 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sparkpolars"
 description = "Conversion between PySpark and Polars DataFrames"
-version = "0.0.3"
+dynamic = ["version"]
 readme = {file = 'README.md', content-type='text/markdown'}
 license = {file = 'LICENSE.md'}
 authors = [{ name = "Skander Boudawara" }]
 keywords = ['pyspark', 'polars', 'conversion', 'spark-to-polars', 'polars-to-spark']
 classifiers = [
+    "Development Status :: 3 - Alpha",
+
+    "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+
     "Operating System :: OS Independent",
-    "License :: OSI Approved :: MIT License"
+
+    "License :: OSI Approved :: MIT License",
+    
+    "Topic :: Software Development :: Libraries",
+    "Intended Audience :: Science/Research",
 ]
 
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "pyspark>=3.3.0",
+    "polars>=1.0",
+]
+
+[tool.setuptools.dynamic]
+version = {attr= "sparkpolars._version.__version__"}
 
 [project.urls]
 "Homepage" = "https://pypi.org/project/sparkpolars/"
@@ -44,8 +58,6 @@ lint = [
 ]
 
 dev = [
-    "pyspark>=3.3.0",
-    "polars>=1.0",
     "pandas>=1.0",
     "pyarrow>=1.0",
 ]
