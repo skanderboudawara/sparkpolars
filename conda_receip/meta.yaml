@@ -1,0 +1,29 @@
+{% set name = "sparkpolars" %}
+{% set version = "0.0.3" %}
+
+package:
+  name: {{ name }}
+  version: {{ version }}
+
+source:
+  url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
+  sha256: 8cfcd193566cafcaf81f7e0c8a97d55c9cd572922f108916386b3a9a2dda0cc0
+
+build:
+  number: 1
+  noarch: python
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+
+requirements:
+  host:
+    - python >=3.10
+    - pip
+  run:
+    - python >=3.10
+
+about:
+  home: "https://pypi.org/project/sparkpolars/"
+  dev_url: "https://github.com/skanderboudawara/sparkpolars"
+  license: "MIT"
+  summary: "Conversion between PySpark and Polars DataFrames"
+  

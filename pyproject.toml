@@ -1,12 +1,15 @@
 [build-system]
-requires = ["setuptools", "wheel", "setuptools-scm[toml]>=6.2"]
+requires = [
+    "setuptools >= 64",
+    "setuptools_scm[toml] >= 6.4"
+]
 build-backend = "setuptools.build_meta"
 
 
 [project]
 name = "sparkpolars"
-version = "0.0.1"
 description = "Conversion between PySpark and Polars DataFrames"
+version = "0.0.3"
 readme = {file = 'README.md', content-type='text/markdown'}
 license = {file = 'LICENSE.md'}
 authors = [{ name = "Skander Boudawara" }]
@@ -22,7 +25,7 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = []
 
-[project.urls] # Optional
+[project.urls]
 "Homepage" = "https://pypi.org/project/sparkpolars/"
 "Bug Reports" = "https://github.com/skanderboudawara/sparkpolars/issues"
 "Source" = "https://github.com/skanderboudawara/sparkpolars"

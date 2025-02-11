@@ -3,8 +3,8 @@ import re
 import pytest
 from polars.testing import assert_frame_equal
 
-from src.config import Config
-from src.sparkpolars import ModeMethod, to_spark, toPolars
+from sparkpolars.config import Config
+from sparkpolars.sparkpolars import ModeMethod, to_spark, toPolars
 
 
 def test_spark_to_polars_native(spark_session, spark_df, polars_df):

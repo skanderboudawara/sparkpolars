@@ -9,17 +9,17 @@ from polars import LazyFrame as PolarsLazyFrame
 from pyspark.sql import DataFrame as SparkDataFrame
 from pyspark.sql import SparkSession
 
-from _from_polars_to_spark import (
+from ._from_polars_to_spark import (
     _convert_schema_polars_to_spark,
     _polars_dict_to_row,
 )
-from _from_spark_to_polars import (
+from ._from_spark_to_polars import (
     _convert_schema_spark_to_polars,
     _get_time_zone,
     _spark_row_as_dict,
 )
-from _importlib_utils import check_version_and_module
-from config import Config
+from ._importlib_utils import check_version_and_module
+from .config import Config
 
 
 class ModeMethod(Enum):
