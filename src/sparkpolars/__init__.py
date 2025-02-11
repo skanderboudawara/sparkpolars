@@ -6,8 +6,8 @@ from polars import (
 )
 from pyspark.sql import DataFrame as SparkDataFrame
 
-from sparkpolars.config import Config
-from sparkpolars.sparkpolars import ModeMethod, to_spark, toPolars
+from .config import Config
+from .sparkpolars import ModeMethod, to_spark, toPolars
 
 __all__ = [
     "Config",

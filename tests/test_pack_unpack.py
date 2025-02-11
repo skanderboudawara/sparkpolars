@@ -1,5 +1,5 @@
-from src._from_polars_to_spark import _pack_map
-from src._from_spark_to_polars import _unpack_map
+from sparkpolars._from_polars_to_spark import _pack_map
+from sparkpolars._from_spark_to_polars import _unpack_map
 
 
 def test__pack_map():

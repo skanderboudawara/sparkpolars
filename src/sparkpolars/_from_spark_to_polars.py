@@ -43,7 +43,7 @@ from pyspark.sql.types import (
     DataType as SparkDataTypes,
 )
 
-from config import Config
+from .config import Config
 
 SIMPLE_TYPES: dict = {
     StringType(): String,

@@ -1,8 +1,8 @@
 import pytest
 
-from src._from_polars_to_spark import _polars_dict_to_row
-from src._from_spark_to_polars import _spark_row_as_dict
-from src.config import Config
+from sparkpolars._from_polars_to_spark import _polars_dict_to_row
+from sparkpolars._from_spark_to_polars import _spark_row_as_dict
+from sparkpolars.config import Config
 
 
 def compare_dicts(d1, d2):
