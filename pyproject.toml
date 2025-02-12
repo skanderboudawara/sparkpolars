@@ -62,12 +62,24 @@ dev = [
     "pyarrow>=1.0",
 ]
 
+
 [tool.black]
 line-length = 100
+force-exclude = '''
+/(
+\.git
+| \.mypy_cache
+| \.venv
+| _build
+| build
+| dist
+| tests
+)/
+'''
 
 [tool.coverage.run]
 source = ["src"]
-omit = ["*/__init__.py", "*/test_*", "*/_exceptions.py", "*/_logger.py"]
+omit = ["*/__init__.py", "*/test_*", "*/_exceptions.py", "*/_logger.py", "*/_version.py"]
 
 [tool.coverage.report]
 show_missing = true
