@@ -1,29 +1,44 @@
-{% set name = "sparkpolars" %}
-{% set version = "0.0.3" %}
+{% set pyproject = load_file_data(
+  '../pyproject.toml',
+  'toml',
+  from_recipe_dir=True) %}
+{% set project = pyproject.get('project') %}
+{% set urls = project.get('urls') %}
+{% set name = project.get('name') %}
+{% set version_match = load_file_regex(
+  load_file="../src/sparkpolars/_version.py",
+  from_recipe_dir=True, 
+  regex_pattern='__version__ = "(.+)"') %}
+{% set version = version_match[1] %}
+{% set build_number = 0 %}
 
 package:
   name: {{ name }}
-  version: {{ version }}
+  version: "{{ version }}"
 
 source:
   url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
-  sha256: 8cfcd193566cafcaf81f7e0c8a97d55c9cd572922f108916386b3a9a2dda0cc0
 
 build:
-  number: 1
+  number: {{ build_number }}
   noarch: python
-  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+  script: {{ PYTHON }} -m pip install --no-deps --ignore-installed .
 
 requirements:
   host:
-    - python >=3.10
     - pip
+    - python
   run:
-    - python >=3.10
+    - python
 
 about:
-  home: "https://pypi.org/project/sparkpolars/"
-  dev_url: "https://github.com/skanderboudawara/sparkpolars"
-  license: "MIT"
-  summary: "Conversion between PySpark and Polars DataFrames"
-  
+  home: {{ urls.get('Homepage') }}
+  license: MIT
+  license_family: MIT
+  summary: {{ project.get('description') }}
+  dev_url: {{ urls.get('Source') }}
+
+extra:
+  recipe-maintainers:
+    - skanderboudawara
+
