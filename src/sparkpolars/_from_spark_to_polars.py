@@ -149,13 +149,29 @@ def _spark_row_as_dict(row: SparkRow, config: Config | None = None) -> dict[str,
         msg = "Expected a Spark Row"
         raise TypeError(msg)
     return {
-        key: (
-            _spark_row_as_dict(value, config)
-            if isinstance(value, SparkRow)
-            else _unpack_map(value) if isinstance(value, dict) else value
-        )
+        key: __convert_value(value, config)
         for key, value in row.asDict().items()
     }
+
+def __convert_value(value : Any, config: Config | None = None) -> Any:
+    """
+    Method support to convert value to Polars DataFrame.
+
+    Mitigates nested Rows in lists
+
+    :param value: The value to convert
+
+    :param config: The configuration of the application. Default is None.
+
+    :return: The converted value
+    """
+    if isinstance(value, SparkRow):
+        return _spark_row_as_dict(value, config)
+    if isinstance(value, dict):
+        return _unpack_map(value)
+    if isinstance(value, list):
+        return [__convert_value(v, config) for v in value]
+    return value
 
 
 def _get_time_zone(spark_dataframe: SparkDataFrame) -> str:  # pragma: no cover
