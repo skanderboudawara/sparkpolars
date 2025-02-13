@@ -51,6 +51,25 @@ Typical conversions between Spark and Polars often involve an intermediate Panda
 
 ## Usage
 
+### 0. Supercharge Polars and Spark DataFrame
+
+In your `__init__.py` file at the root project you can do the following for ease of use
+
+```python
+from sparkpolars import toPolars, to_spark
+from pyspark.sql import DataFrame as SparkDataFrame
+from polars import DataFrame as PolarsDataFrame, LazyFrame as PolarsLazyFrame
+
+__all__ = [
+    "toPolars",
+    "to_spark",
+]
+
+SparkDataFrame.toPolars = toPolars
+PolarsDataFrame.to_spark = to_spark
+PolarsLazyFrame.to_spark = to_spark
+```
+
 ### 1. From Spark to Polars DataFrame
 
 ```python

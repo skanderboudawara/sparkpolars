@@ -3,7 +3,7 @@ import re
 import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
-from pyspark.sql.types import IntegerType, StringType, StructField, StructType
+from pyspark.sql.types import IntegerType, StringType, StructField, StructType, ArrayType
 
 from src.sparkpolars.config import Config
 from src.sparkpolars.sparkpolars import ModeMethod, to_spark, toPolars
@@ -101,3 +101,34 @@ def test_empty_polars_dataframe(spark_session):
 
     assert df.schema == expected_df.schema
     assert df.collect() == expected_df.collect()
+
+
+def test_with_array_struct(spark_session):
+
+    schema = StructType([
+        StructField("a", StringType()),
+        StructField("b", ArrayType(StructType([
+            StructField("c", IntegerType()),
+            StructField("d", StringType()),
+    ])))])
+
+    data = [
+        ("a", [(1, "b"), (2, "c")]),
+        ("b", [(3, "d")]),
+    ]
+
+    df = spark_session.createDataFrame(data, schema=schema)
+    pl_df = df.toPolars()
+
+    pl_expected = pl.DataFrame(
+        schema={
+            "a": pl.Utf8,
+            "b": pl.List(pl.Struct({"c": pl.Int32, "d": pl.Utf8})),
+        },
+        data={
+            "a": ["a", "b"],
+            "b": [[(1, "b"), (2, "c")], [(3, "d")]],
+        }
+    )
+
+    assert_frame_equal(pl_df, pl_expected)
