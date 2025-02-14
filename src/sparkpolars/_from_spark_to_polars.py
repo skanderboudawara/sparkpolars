@@ -148,12 +148,10 @@ def _spark_row_as_dict(row: SparkRow, config: Config | None = None) -> dict[str,
     if not isinstance(row, SparkRow):
         msg = "Expected a Spark Row"
         raise TypeError(msg)
-    return {
-        key: __convert_value(value, config)
-        for key, value in row.asDict().items()
-    }
+    return {key: __convert_value(value, config) for key, value in row.asDict().items()}
 
-def __convert_value(value : Any, config: Config | None = None) -> Any:
+
+def __convert_value(value: Any, config: Config | None = None) -> Any:
     """
     Method support to convert value to Polars DataFrame.
 
