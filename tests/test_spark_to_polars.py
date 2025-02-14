@@ -3,7 +3,7 @@ import re
 import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
-from pyspark.sql.types import IntegerType, StringType, StructField, StructType, ArrayType
+from pyspark.sql.types import ArrayType, IntegerType, StringType, StructField, StructType
 
 from src.sparkpolars.config import Config
 from src.sparkpolars.sparkpolars import ModeMethod, to_spark, toPolars
@@ -128,7 +128,7 @@ def test_with_array_struct(spark_session):
         data={
             "a": ["a", "b"],
             "b": [[(1, "b"), (2, "c")], [(3, "d")]],
-        }
+        },
     )
 
     assert_frame_equal(pl_df, pl_expected)

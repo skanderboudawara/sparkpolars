@@ -13,6 +13,10 @@ from polars.datatypes import (
     List,
     String,
     Struct,
+    UInt8,
+    UInt16,
+    UInt32,
+    UInt64,
 )
 from polars.datatypes import (
     DataType as PolarsDataTypes,
@@ -43,16 +47,20 @@ from pyspark.sql.types import (
 from .config import Config
 
 SIMPLE_TYPES: dict = {
-    StringType(): String,
-    ByteType(): Int8,
-    ShortType(): Int16,
-    IntegerType(): Int32,
-    LongType(): Int64,
-    BooleanType(): Boolean,
-    FloatType(): Float32,
-    DateType(): Date,
-    DoubleType(): Float64,
-    BinaryType(): Binary,
+    String(): StringType(),
+    Int8(): ByteType(),
+    Int16(): ShortType(),
+    Int32(): IntegerType(),
+    Int64(): LongType(),
+    UInt8(): ByteType(),
+    UInt16(): ShortType(),
+    UInt32(): IntegerType(),
+    UInt64(): LongType(),
+    Boolean(): BooleanType(),
+    Float32(): FloatType(),
+    Date(): DateType(),
+    Float64(): DoubleType(),
+    Binary(): BinaryType(),
 }
 
 
@@ -112,7 +120,7 @@ def _type_convert_polars_to_spark(
         return DecimalType(precision, polar_type.scale)
     if isinstance(polar_type, Datetime):
         return TimestampType()
-    for spark_type, pl_type in SIMPLE_TYPES.items():
+    for pl_type, spark_type in SIMPLE_TYPES.items():
         if polar_type == pl_type:
             return spark_type
     msg = f"Unsupported type: {polar_type!r}"
