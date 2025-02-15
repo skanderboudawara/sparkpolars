@@ -5,7 +5,7 @@ repos:
         name: pytest
         stages: [pre-commit]
         language: python
-        entry: ./.venv/bin/pytest --cov
+        entry: pytest --cov
         types: [python]
         pass_filenames: false
         always_run: true

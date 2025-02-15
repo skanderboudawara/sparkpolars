@@ -1,4 +1,7 @@
+from polars import DataFrame as PolarsDataFrame
+from polars import LazyFrame as PolarsLazyFrame
 from polars.datatypes import (
+    Array,
     Binary,
     Boolean,
     Date,
@@ -10,7 +13,9 @@ from polars.datatypes import (
     Int16,
     Int32,
     Int64,
+    Int128,
     List,
+    Null,
     String,
     Struct,
     UInt8,
@@ -34,6 +39,7 @@ from pyspark.sql.types import (
     IntegerType,
     LongType,
     MapType,
+    NullType,
     ShortType,
     StringType,
     StructField,
@@ -52,6 +58,7 @@ SIMPLE_TYPES: dict = {
     Int16(): ShortType(),
     Int32(): IntegerType(),
     Int64(): LongType(),
+    Int128(): LongType(),
     UInt8(): ByteType(),
     UInt16(): ShortType(),
     UInt32(): IntegerType(),
@@ -61,6 +68,7 @@ SIMPLE_TYPES: dict = {
     Date(): DateType(),
     Float64(): DoubleType(),
     Binary(): BinaryType(),
+    Null(): NullType(),
 }
 
 
@@ -192,3 +200,19 @@ def _polars_dict_to_row(
             for column_name, value in polar_dict.items()
         },
     )
+
+
+def _convert_array_to_list(
+    df: PolarsDataFrame | PolarsLazyFrame,
+) -> PolarsDataFrame | PolarsLazyFrame:
+    """
+    Convert Polars Array to list.
+
+    :param df: The Polars DataFrame or LazyFrame
+
+    :return: The Polars DataFrame or LazyFrame
+    """
+    for column_name, column_type in df.collect_schema().items():
+        if isinstance(column_type, Array):
+            df = df.with_columns(df[column_name].arr.to_list().alias(column_name))
+    return df
