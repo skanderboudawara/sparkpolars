@@ -13,6 +13,7 @@ from polars.datatypes import (
     Int32,
     Int64,
     List,
+    Null,
     String,
     Struct,
 )
@@ -33,10 +34,12 @@ from pyspark.sql.types import (
     IntegerType,
     LongType,
     MapType,
+    NullType,
     ShortType,
     StringType,
     StructField,
     StructType,
+    TimestampNTZType,
     TimestampType,
 )
 from pyspark.sql.types import (
@@ -56,6 +59,8 @@ SIMPLE_TYPES: dict = {
     DateType(): Date,
     DoubleType(): Float64,
     BinaryType(): Binary,
+    NullType(): Null,
+    TimestampNTZType(): Datetime,
 }
 
 

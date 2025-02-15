@@ -3,7 +3,10 @@ import polars as pl
 import pyspark.sql.types as T
 import pytest
 
-from src.sparkpolars._from_polars_to_spark import _type_convert_polars_to_spark
+from src.sparkpolars._from_polars_to_spark import (
+    _convert_array_to_list,
+    _type_convert_polars_to_spark,
+)
 from src.sparkpolars._from_spark_to_polars import _type_convert_pyspark_to_polars
 from src.sparkpolars.config import Config
 
@@ -81,3 +84,17 @@ def test__type_convert_polars_to_spark_unknown():
     polar_type = pl.List(pl.List(pl.Int32))
     with pytest.raises(ValueError, match=r"Only types List\(Struct\(key: Type, value: Type\)\) are supported for maps."):
         _type_convert_polars_to_spark(polar_type, is_map=True)
+
+
+def test_convert_array_to_list():
+    df = pl.DataFrame(
+        data={
+            "foo": [[1, 2, 3]],
+        },
+        schema={
+            "foo": pl.Array(pl.Int32, 3),
+        },
+    )
+    df = _convert_array_to_list(df)
+    schema = df.collect_schema()
+    schema == {"foo": pl.List(pl.Int32)}  # noqa: B015

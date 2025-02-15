@@ -12,10 +12,10 @@ conda install skandev::sparkpolars
 
 ## Requirements
 
-- **Python** ≥ 3.10  
-- **Apache Spark** ≥ 3.3.0 (must be pre-installed)  
-- **Polars** ≥ 1.0 (must be pre-installed)  
-- **Pyspark** must also be installed if you plan to use this library  
+- **Python** ≥ 3.10
+- **Apache Spark** ≥ 3.3.0 (must be pre-installed)
+- **Polars** ≥ 1.0 (must be pre-installed)
+- **Pyspark** must also be installed if you plan to use this library
 
 ## Why Does This Library Exist?
 
@@ -36,8 +36,8 @@ Typical conversions between Spark and Polars often involve an intermediate Panda
 
 ### Key Benefits
 
-- 🚀 **No extra dependencies** – No need for Pandas or PyArrow  
-- ✅ **Reliable handling of complex types** – Provides better consistency for `MapType`, `StructType`, and nested `ArrayType`, where existing conversion methods can be unreliable  
+- 🚀 **No extra dependencies** – No need for Pandas or PyArrow
+- ✅ **Reliable handling of complex types** – Provides better consistency for `MapType`, `StructType`, and nested `ArrayType`, where existing conversion methods can be unreliable
 
 ## Features
 
@@ -105,7 +105,7 @@ spark = SparkSession.builder.appName("example").getOrCreate()
 df = DataFrame({"a": [1], "b": [2]})  # It can also be a LazyDataFrame
 
 spark_df = df.to_spark(spark=spark)
-# or 
+# or
 spark_df = df.to_spark()  # It will try to get the Spark ActiveSession
 ```
 
@@ -190,7 +190,13 @@ Type: `StructField("example", MapType(StringType(), IntegerType()))`
 Data:  `{"a": 1, "b": 2}`
 
 ## License
-- pending
+- MIT License
 
 ## Contribution
-- pending
+- Create an associated issue, or assign yourself to an existing issue
+- Fork the project
+- Install all the dependencies `pip install ".[dev,lint,test]`
+- Install pre-commit file `pre-commit install`
+- Develop your feature
+- Unit-test your feature
+- Create a Pull request

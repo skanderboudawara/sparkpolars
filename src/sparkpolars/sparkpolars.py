@@ -10,6 +10,7 @@ from pyspark.sql import DataFrame as SparkDataFrame
 from pyspark.sql import SparkSession
 
 from ._from_polars_to_spark import (
+    _convert_array_to_list,
     _convert_schema_polars_to_spark,
     _polars_dict_to_row,
 )
@@ -122,6 +123,7 @@ def to_spark(
         spark = SparkSession.getActiveSession()
     if isinstance(self, PolarsLazyFrame):
         self = self.collect()
+    self = _convert_array_to_list(self)
     spark_schema = _convert_schema_polars_to_spark(self.schema, config)
 
     if mode == ModeMethod.NATIVE:
