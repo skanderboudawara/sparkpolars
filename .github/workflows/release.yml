@@ -27,22 +27,30 @@ jobs:
         with:
             auto-update-conda: true
             python-version: "3.11"
+      - name: Upgrading pip
+        run: python -m pip install --upgrade pip
+      - name: Installing conda build
+        run: conda install -y conda-build
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install '.[dev]' anaconda-client anaconda-auth anaconda
-          conda install -y conda-build
-      - name: Build and publish package
+          pip install "setuptools >= 64", "setuptools_scm[toml] >= 6.4", "wheel", anaconda-client anaconda-auth anaconda
+      - name: Prepare Environment
         run: |
           echo "The ref name is ${{ github.ref_name }}"
           rm -rf dist
           rm -rf conda_receip
+      - name: Build PyPi Package
+        run: |
           python -m build
           python -m twine check dist/*
           twine upload -p ${{ secrets.TWINE_API_KEY }} dist/*
+      - name: Build Conda Package
+        run: |
           conda config --set anaconda_upload no
           conda-build conda_receip/ --package-format=tar.bz2 --output-folder dist
           anaconda -t ${{ secrets.ANACONDA_AUTH_API_KEY }} upload dist/noarch/sparkpolars-${{ github.ref_name }}-py_0.tar.bz2
+      - name: Push file to GitHub Release
+        run: |
           gh release upload ${{github.ref_name}} dist/sparkpolars-${{ github.ref_name }}.tar.gz
           gh release upload ${{github.ref_name}} dist/sparkpolars-${{ github.ref_name }}-py3-none-any.whl
           gh release upload ${{github.ref_name}} dist/noarch/sparkpolars-${{ github.ref_name }}-py_0.tar.bz2
