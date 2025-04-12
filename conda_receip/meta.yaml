@@ -7,8 +7,8 @@
 {% set name = project.get('name') %}
 {% set version_match = load_file_regex(
   load_file="../src/sparkpolars/_version.py",
-  from_recipe_dir=True, 
-  regex_pattern='__version__ = "(.+)"') %}
+    from_recipe_dir=True,
+    regex_pattern="__version__ = version = '(.+)'") %}
 {% set version = version_match[1] %}
 {% set build_number = 0 %}
 
