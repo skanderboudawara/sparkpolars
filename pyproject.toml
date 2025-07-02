@@ -192,3 +192,10 @@ known-local-folder = ["src"]
     "PLR0917",
     "N812",
 ]
+"*sql/*.py" = [
+    "PLR0913",
+    "ARG002",
+    "FBT001",
+    "FBT002",
+    "N803"
+]
