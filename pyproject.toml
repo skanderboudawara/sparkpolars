@@ -197,5 +197,9 @@ known-local-folder = ["src"]
     "ARG002",
     "FBT001",
     "FBT002",
+    "D103",
+    "N806",
+    "A002",
+    "A001",
     "N803"
 ]
