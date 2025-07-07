@@ -1,3 +1,5 @@
+"""Polars SQL types for Polyspark."""
+
 import polars as pl
 
 # Create StringType alias for polars String type
