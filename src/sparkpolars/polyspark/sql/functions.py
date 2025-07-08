@@ -7,8 +7,18 @@ import polars as pl
 import polars.datatypes as plf_types
 import polars.functions as plf
 from polars import lit
-from polars.expr import Expr
 from polars._utils.parse import parse_into_list_of_expressions
+from polars.expr import Expr
+
+Expr._original_cast = Expr.cast
+
+
+def cast_strict(self, dtype, strict=False):
+    # Filter out columns that don't exist
+    return self._original_cast(dtype, strict=strict)
+
+
+Expr.cast = cast_strict
 
 
 # Add Spark-compatible methods to Polars Expr
@@ -25,6 +35,7 @@ def isin(self: Expr, *cols: Any) -> Expr:
         return self.is_in(cols[0])
     return self.is_in(cols)
 
+
 def over(self: Expr, partition_by=None, *more_exprs, order_by=None, sort_by=None):
     # Handle Window object
     if hasattr(partition_by, "_partition_by"):
@@ -32,7 +43,7 @@ def over(self: Expr, partition_by=None, *more_exprs, order_by=None, sort_by=None
         window_partition_by = partition_by._partition_by
         window_order_by = partition_by._order_by
         window_sort_by = partition_by._sort_by
-        
+
         # Use Window object values, overriding with any explicit parameters
         if partition_by._partition_by is not None:
             partition_by = window_partition_by
@@ -40,14 +51,14 @@ def over(self: Expr, partition_by=None, *more_exprs, order_by=None, sort_by=None
             order_by = window_order_by
         if sort_by is None and window_sort_by is not None:
             sort_by = window_sort_by
-    
+
     if partition_by is None:
         if order_by is not None and sort_by is not None:
             return self.sort_by(order_by, descending=sort_by)
         return self
-    
+
     partition_by = parse_into_list_of_expressions(partition_by, *more_exprs)
-    
+
     result = self._from_pyexpr(
         self._pyexpr.over(
             partition_by,
@@ -57,11 +68,11 @@ def over(self: Expr, partition_by=None, *more_exprs, order_by=None, sort_by=None
             mapping_strategy="group_to_rows",
         ),
     )
-    
+
     # Only apply sort_by if both order_by and sort_by are not None
     if order_by is not None and sort_by is not None:
         result = result.sort_by(order_by, descending=sort_by)
-    
+
     return result
 
 
@@ -73,7 +84,7 @@ Expr.over = over
 
 col = plf.col
 column = col
-
+Column = col
 
 def _str_to_col(name: str | Expr) -> Expr:
     if isinstance(name, str):
@@ -81,10 +92,18 @@ def _str_to_col(name: str | Expr) -> Expr:
     return name
 
 
+def eqNullSafe(self: Expr, other: str | Expr) -> Expr:
+    other = _str_to_col(other)
+    return self.eq_missing(other)
+
+
+Expr.eqNullSafe = eqNullSafe
+
+
 def rlike(str: str | Expr, regexp: str) -> Expr:
     return _str_to_col(str).str.contains(regexp, literal=False)
 
-
+Expr.rlike = rlike
 regexp_like = rlike
 regexp = rlike
 
@@ -92,10 +111,12 @@ regexp = rlike
 def startswith(str: str | Expr, prefix: str) -> Expr:
     return _str_to_col(str).str.starts_with(prefix)
 
+Expr.startswith = startswith
 
 def endswith(str: str | Expr, suffix: str) -> Expr:
     return _str_to_col(str).str.ends_with(suffix)
 
+Expr.endswith = endswith
 
 def substring(str: str | Expr, pos: int, len: int | None = None) -> Expr:
     if len is not None:
@@ -210,6 +231,7 @@ def btrim(str: str | Expr, trim: str | None = None) -> Expr:
 def contains(left: str | Expr, right: str | Expr) -> Expr:
     return _str_to_col(left).str.contains(right)
 
+Expr.contains = contains
 
 def encode(col: str | Expr, charset: str) -> Expr:
     return _str_to_col(col).str.encode(charset)
@@ -355,50 +377,57 @@ def least(*cols: str | Expr) -> Expr:
     cols = [_str_to_col(col) for col in cols]
     return plf.min_horizontal(*cols)
 
-def _desc_status(self: Expr, status: bool = True) -> Expr:
-    return status
 
-Expr._desc_status = _desc_status
+def _get_desc_status(self: Expr) -> bool:
+    return getattr(self, "_desc_status_value", False)
+
+
+def _set_desc_status(self: Expr, status: bool) -> None:
+    self._desc_status_value = status
+
+
+Expr._desc_status = property(_get_desc_status, _set_desc_status)
+
 
 def asc(col: str | Expr) -> Expr:
     col = _str_to_col(col)
-    col._desc_status(False)
+    col._desc_status = False
     return col.sort(descending=False, nulls_last=False)
 
 
 def asc_nulls_first(col: str | Expr) -> Expr:
     col = _str_to_col(col)
-    col._desc_status(False)
+    col._desc_status = False
     return col.sort(descending=False, nulls_last=False)
 
 
 def asc_nulls_last(col: str | Expr) -> Expr:
     col = _str_to_col(col)
-    col._desc_status(False)
+    col._desc_status = False
     return col.sort(descending=False, nulls_last=True)
 
 
 def desc(col: str | Expr) -> Expr:
     col = _str_to_col(col)
-    col._desc_status(True)
+    col._desc_status = True
     return col.sort(descending=True, nulls_last=False)
 
 
 def desc_nulls_first(col: str | Expr) -> Expr:
     col = _str_to_col(col)
-    col._desc_status(True)
+    col._desc_status = True
     return col.sort(descending=True, nulls_last=False)
 
 
 def desc_nulls_last(col: str | Expr) -> Expr:
     col = _str_to_col(col)
-    col._desc_status(True)
+    col._desc_status = True
     return col.sort(descending=True, nulls_last=True)
 
 
 def array(*cols: str | Expr) -> Expr:
     if not cols:
-        return plf.concat_list([plf.lit(None)])
+        return plf.concat_list(plf.lit([]))
     cols = [_str_to_col(col) for col in cols]
     return plf.concat_list(*cols)
 
