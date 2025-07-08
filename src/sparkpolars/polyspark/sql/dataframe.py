@@ -7,6 +7,36 @@ from polars import LazyFrame as LazyFrameOriginal
 from polars import concat
 from polars.expr import Expr
 
+from .functions import _str_to_col
+
+DataFrameOriginal._original_drop = DataFrameOriginal.drop
+
+
+def drop_strict(self, *cols, strict=True):
+    # Filter out columns that don't exist
+    existing_cols = [col for col in cols if col in self.columns]
+    if not existing_cols:
+        # No columns to drop, return self unchanged
+        return self
+    return self._original_drop(*existing_cols, strict=strict)
+
+
+DataFrameOriginal.drop = drop_strict
+
+LazyFrameOriginal._original_drop = LazyFrameOriginal.drop
+
+
+def drop_strict_lazy(self, *cols, strict=True):
+    # Filter out columns that don't exist
+    existing_cols = [col for col in cols if col in self.collect_schema().names()]
+    if not existing_cols:
+        # No columns to drop, return self unchanged
+        return self
+    return self._original_drop(*existing_cols, strict=strict)
+
+
+LazyFrameOriginal.drop = drop_strict_lazy
+
 
 def withColumn(
     self: DataFrameOriginal | LazyFrameOriginal,
@@ -132,6 +162,15 @@ def dropnulls(
     )
 
 
+def _expr_has_ops(expr):
+    if isinstance(expr, Expr):
+        # Polars Exprs have a tree structure; check their string representation for ops
+        ops = ["|", "&", "<", ">", "<=", ">=", "!=", "=="]
+        expr_str = str(expr)
+        return any(op in expr_str for op in ops)
+    return False
+
+
 def join(
     self: DataFrameOriginal | LazyFrameOriginal,
     other: DataFrameOriginal | LazyFrameOriginal,
@@ -140,19 +179,31 @@ def join(
 ) -> DataFrameOriginal | LazyFrameOriginal:
     mapping = {
         "inner": "inner",
-        "left": "left",
-        "left_out": "left",
-        "right": "right",
+        "left_outer": "left",
+        "leftouter": "left",
         "right_outer": "right",
-        "anti": "anti",
+        "rightouter": "right",
         "left_anti": "anti",
+        "leftanti": "anti",
         "full": "outer",
+        "fullouter": "outer",
+        "full_outer": "outer",
     }
     how = mapping.get(how, how)
-    if not all(isinstance(col, str) for col in on):
-        msg = "Join columns must be strings."
+    coalesce = True if how == "full" else None
+    if isinstance(on, Expr) and not on.meta.is_column_selection():
+        if how != "inner":
+            msg = "Join on expressions with predicates is only available in inner joins."
+            raise NotImplementedError(
+                msg,
+            )
+        return self.join_where(other, on)
+    on = [on] if isinstance(on, str | Expr) else on
+    on = [_str_to_col(c) if isinstance(c, str) else c for c in on]
+    if not all(isinstance(col, str | Expr) and col.meta.is_column_selection() for col in on):
+        msg = "Join columns must be strings or column expressions and not predicates."
         raise ValueError(msg)
-    return self.join(other, on=on, how=how)
+    return self.join(other, on=on, how=how, coalesce=coalesce, suffix="_r_polyspark")
 
 
 def unionByName(

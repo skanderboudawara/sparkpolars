@@ -1,18 +1,22 @@
 import polars.functions as plf
 
 
-class Window:
+class WindowClass:
 
-    _partition_by = plf.all()
-    _order_by=None
-    _sort_by=None
+    def __init__(self) -> None:
+        self._partition_by = plf.all()
+        self._order_by = None
+        self._sort_by = None
 
     def partitionBy(self, *cols):
         self._partition_by = cols
         return self
-    
+
     def orderBy(self, *cols):
         self._order_by = cols
+        self._sort_by = [
+            col._desc_status if hasattr(col, "_desc_status") else False for col in cols
+        ]
         return self
 
     def rangeBetween(self, start, end):
@@ -33,30 +37,34 @@ class Window:
     def __call__(self, *args, **kwds):
         return self._partition_by
 
-    def __str__(self) -> str:
-        return str(getattr(self, "_partition_by", []))
-
     def __iter__(self):
-        return iter({
-            "partition_by": self._partition_by,
-            "order_by": self._order_by,
-            "sort_by": self._sort_by
-        })
+        return iter(
+            {
+                "partition_by": self._partition_by,
+                "order_by": self._order_by,
+                "sort_by": self._sort_by,
+            },
+        )
 
     @property
     def cols(self):
         return getattr(self, "_partition_by", [])
 
-    # self = self.sort(
-    #     by=[*partition_cols, *col_names],
-    #     descending=[True] * len(partition_cols) + ordering,
-    #     nulls_last=[True] * len(partition_cols) + null_conditions,
-    #     maintain_order=True,
-    # ).with_columns(
-    #     struct(*partition_cols).rank("ordinal").over(*partition_cols).alias("_keep_"),
-    # )
 
-    # if rank_method == "dense":
-    #     self = self.with_columns(
-    #         col("_keep_").min().over(*[*partition_cols, *col_names]).alias("_keep_"),
-    #     )
+class WindowFactory:
+    """Factory class that allows both W and W() usage."""
+
+    def __init__(self) -> None:
+        self._instance = WindowClass()
+
+    def __call__(self):
+        """Return a new Window instance when called as W()."""
+        return WindowClass()
+
+    def __getattr__(self, name):
+        """Delegate attribute access to the Window instance for W.method() usage."""
+        return getattr(self._instance, name)
+
+
+# Create a singleton instance that works for both W and W() usage
+Window = WindowFactory()
