@@ -1,5 +1,5 @@
 """
-This library to configure the application.
+This library to configure the application..
 """
 
 import zoneinfo

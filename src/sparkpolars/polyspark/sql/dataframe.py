@@ -4,10 +4,21 @@ from typing import Any
 
 from polars import DataFrame as DataFrameOriginal
 from polars import LazyFrame as LazyFrameOriginal
-from polars import concat
+from polars import concat, lit, col
+from polars.config import Config
 from polars.expr import Expr
 
 from .functions import _str_to_col
+import re
+
+
+def return_self(
+    self: DataFrameOriginal | LazyFrameOriginal,
+    *_args: Any,
+    **_kwargs: Any,
+) -> DataFrameOriginal | LazyFrameOriginal:
+    return self
+
 
 DataFrameOriginal._original_drop = DataFrameOriginal.drop
 
@@ -38,13 +49,6 @@ def drop_strict_lazy(self, *cols, strict=True):
 LazyFrameOriginal.drop = drop_strict_lazy
 
 
-def withColumn(
-    self: DataFrameOriginal | LazyFrameOriginal,
-    name: str,
-    expr: Expr,
-) -> DataFrameOriginal | LazyFrameOriginal:
-    return self.with_columns(expr.alias(name))
-
 
 def withColumns(
     self: DataFrameOriginal | LazyFrameOriginal,
@@ -60,7 +64,14 @@ def withColumns(
     if len(args) == 2 and not kwargs:
         # Two argument form: withColumns("col_name", expr) - treat as withColumn
         name, expr = args
-        return self.with_columns(expr.alias(name))
+        # Ensure expr is properly aliased
+        try:
+            aliased_expr = expr.alias(name)
+        except AttributeError:
+            # If expr doesn't have alias method, wrap it in a column expression
+            import polars as pl
+            aliased_expr = pl.col(expr).alias(name) if isinstance(expr, str) else expr.alias(name)
+        return self.with_columns(aliased_expr)
     if kwargs:
         # Keyword argument form: withColumns(col1=expr1, col2=expr2)
         columns = [expr.alias(name) for name, expr in kwargs.items()]
@@ -72,28 +83,14 @@ def withColumns(
     raise ValueError(msg)
 
 
-def hint(
+def withColumn(
     self: DataFrameOriginal | LazyFrameOriginal,
-    *_args: Any,
-    **_kwargs: Any,
+    name: str,
+    expr: Expr,
 ) -> DataFrameOriginal | LazyFrameOriginal:
-    return self
+    return self.withColumns({name: expr})
 
 
-def repartition(
-    self: DataFrameOriginal | LazyFrameOriginal,
-    *_args: Any,
-    **_kwargs: Any,
-) -> DataFrameOriginal | LazyFrameOriginal:
-    return self
-
-
-def coalesce(
-    self: DataFrameOriginal | LazyFrameOriginal,
-    *_args: Any,
-    **_kwargs: Any,
-) -> DataFrameOriginal | LazyFrameOriginal:
-    return self
 
 
 def persist(
@@ -114,24 +111,7 @@ def dropDuplicates(
     self: DataFrameOriginal | LazyFrameOriginal,
     subset: list[str] | None = None,
 ) -> DataFrameOriginal | LazyFrameOriginal:
-    if subset:
-        return self.distinct()
-    msg = "drop_duplicates with 'subset' parameter is not implemented."
-    raise NotImplementedError(
-        msg,
-    )
-
-
-def drop_duplicates(
-    self: DataFrameOriginal | LazyFrameOriginal,
-    subset: list[str] | None = None,
-) -> DataFrameOriginal | LazyFrameOriginal:
-    if subset:
-        return self.distinct()
-    msg = "drop_duplicates with 'subset' parameter is not implemented."
-    raise NotImplementedError(
-        msg,
-    )
+    return self.unique(subset=subset, keep="first")
 
 
 def dropna(
@@ -148,6 +128,8 @@ def dropna(
     )
 
 
+
+
 def dropnulls(
     self: DataFrameOriginal | LazyFrameOriginal,
     how: str = "any",
@@ -160,15 +142,6 @@ def dropnulls(
     raise NotImplementedError(
         msg,
     )
-
-
-def _expr_has_ops(expr):
-    if isinstance(expr, Expr):
-        # Polars Exprs have a tree structure; check their string representation for ops
-        ops = ["|", "&", "<", ">", "<=", ">=", "!=", "=="]
-        expr_str = str(expr)
-        return any(op in expr_str for op in ops)
-    return False
 
 
 def join(
@@ -224,26 +197,33 @@ def crossJoin(
     return self.join(other, how="cross")
 
 
-def checkpoint(
-    self: DataFrameOriginal | LazyFrameOriginal,
-    *_args: Any,
-    **_kwargs: Any,
-) -> DataFrameOriginal | LazyFrameOriginal:
-    return self
-
-
-def localCheckpoint(
-    self: DataFrameOriginal | LazyFrameOriginal,
-    *_args: Any,
-    **_kwargs: Any,
-) -> DataFrameOriginal | LazyFrameOriginal:
-    return self
-
-
 def groupBy(self: DataFrameOriginal | LazyFrameOriginal, *cols: Any) -> Any:
     # Convert ColExtension objects to their underlying expressions
     return self.group_by(*cols)
 
+
+def agg(self: DataFrameOriginal | LazyFrameOriginal, *expr) -> DataFrameOriginal | LazyFrameOriginal:
+    if len(expr) == 1 and isinstance(expr[0], dict):
+        expr_dict = expr[0]
+        # Check all keys and values are strings
+        if not all(isinstance(k, str) and isinstance(v, str) for k, v in expr_dict.items()):
+            msg = "All keys and values in the aggregation dictionary must be strings."
+            raise ValueError(msg)
+        # Allowed aggregation functions
+        allowed_aggs = {"min", "max", "mean", "sum", "count", "first", "last"}
+        if not all(v in allowed_aggs for v in expr_dict.values()):
+            msg = f"Aggregation functions must be one of {allowed_aggs}."
+            raise ValueError(msg)
+        expr = [
+            getattr(col(k), v)().alias(f"{v}({k})")
+            for k, v in expr_dict.items()
+        ]
+    return self.group_by(lit(1).alias("agg_polyspark")).agg(
+        *expr,
+    ).drop("agg_polyspark")
+
+DataFrameOriginal.agg = agg
+LazyFrameOriginal.agg = agg
 
 def schema_lazy(self: LazyFrameOriginal) -> Any:
     return self.collect_schema()
@@ -268,50 +248,102 @@ def isEmpty_non_lazy(self: DataFrameOriginal) -> bool:
 def count_non_lazy(self: DataFrameOriginal) -> int:
     return self.height
 
+def show(self, n=20, truncate=True, vertical=False):
+    if isinstance(self, LazyFrameOriginal):
+        self = self.collect()
+    if truncate:
+        Config.set_tbl_width_chars(20)
+    else:
+        Config.set_fmt_str_lengths(9999)
+    if vertical:
+        raise NotImplementedError(
+            "Vertical display is not implemented in Polars DataFrame."
+        )
+    if n < 0:
+        raise ValueError("n must be a non-negative integer.")
+    print(self.head(n))
+
+
+def not_implemented(self, *args, **kwargs):
+    raise NotImplementedError("This method is not implemented in Polars DataFrame.")
+
+def colRegex(self, colName: str) -> DataFrameOriginal | LazyFrameOriginal:
+    pattern = re.compile(colName)
+    columns = [c for c in self.columns if pattern.search(c)]
+    return self.select(columns)
+
+def withColumnRenamed(self, existing, new):
+    dict = {existing: new}
+    return self.rename(dict, strict=False)
+
+def withColumnsRenamed(self, colsMap):
+    return self.rename(colsMap, strict=False)
 
 DataFrameOriginal.withColumn = withColumn
+
 DataFrameOriginal.withColumns = withColumns
-DataFrameOriginal.hint = hint
-DataFrameOriginal.repartition = repartition
-DataFrameOriginal.coalesce = coalesce
+DataFrameOriginal.hint = return_self
+DataFrameOriginal.alias = return_self
+DataFrameOriginal.repartition = return_self
+DataFrameOriginal.coalesce = return_self
 DataFrameOriginal.persist = persist
 DataFrameOriginal.distinct = distinct
 DataFrameOriginal.dropDuplicates = dropDuplicates
-DataFrameOriginal.drop_duplicates = drop_duplicates
+DataFrameOriginal.drop_duplicates = dropDuplicates
 DataFrameOriginal.dropna = dropna
 DataFrameOriginal.dropnulls = dropnulls
 DataFrameOriginal.join = join
 DataFrameOriginal.unionByName = unionByName
 DataFrameOriginal.crossJoin = crossJoin
-DataFrameOriginal.checkpoint = checkpoint
-DataFrameOriginal.localCheckpoint = localCheckpoint
+DataFrameOriginal.checkpoint = return_self
+DataFrameOriginal.localCheckpoint = return_self
 DataFrameOriginal.groupBy = groupBy
+DataFrameOriginal.show = show
+DataFrameOriginal.approxQuantile = not_implemented
+DataFrameOriginal.asTable = not_implemented
+DataFrameOriginal.corr = not_implemented
+DataFrameOriginal.cov = not_implemented
+DataFrameOriginal.crosstab = not_implemented
+DataFrameOriginal.cube = not_implemented
+DataFrameOriginal.withColumnRenamed = withColumnRenamed
+DataFrameOriginal.withColumnsRenamed = withColumnsRenamed
 
 DataFrameOriginal.isEmpty = isEmpty_non_lazy
 DataFrameOriginal.count = property(count_non_lazy)
+DataFrameOriginal.colRegex = colRegex
 
 DataFrame = DataFrameOriginal
 
+LazyFrameOriginal.approxQuantile = not_implemented
+LazyFrameOriginal.asTable = not_implemented
+LazyFrameOriginal.cube = not_implemented
+LazyFrameOriginal.crosstab = not_implemented
+LazyFrameOriginal.cov = not_implemented
+LazyFrameOriginal.corr = not_implemented
 LazyFrameOriginal.schema = property(schema_lazy)
 LazyFrameOriginal.isEmpty = isEmpty_lazy
 LazyFrameOriginal.count = property(count_lazy)
 LazyFrameOriginal.columns = property(columns_lazy)
 LazyFrameOriginal.withColumn = withColumn
 LazyFrameOriginal.withColumns = withColumns
-LazyFrameOriginal.hint = hint
-LazyFrameOriginal.repartition = repartition
-LazyFrameOriginal.coalesce = coalesce
+LazyFrameOriginal.hint = return_self
+LazyFrameOriginal.repartition = return_self
+LazyFrameOriginal.coalesce = return_self
 LazyFrameOriginal.persist = persist
 LazyFrameOriginal.distinct = distinct
 LazyFrameOriginal.dropDuplicates = dropDuplicates
-LazyFrameOriginal.drop_duplicates = drop_duplicates
+LazyFrameOriginal.drop_duplicates = dropDuplicates
 LazyFrameOriginal.dropna = dropna
 LazyFrameOriginal.dropnulls = dropnulls
 LazyFrameOriginal.join = join
 LazyFrameOriginal.unionByName = unionByName
 LazyFrameOriginal.crossJoin = crossJoin
-LazyFrameOriginal.checkpoint = checkpoint
-LazyFrameOriginal.localCheckpoint = localCheckpoint
+LazyFrameOriginal.checkpoint = return_self
+LazyFrameOriginal.localCheckpoint = return_self
 LazyFrameOriginal.groupBy = groupBy
+LazyFrameOriginal.colRegex = colRegex
+LazyFrameOriginal.show = show
+LazyFrameOriginal.withColumnRenamed = withColumnRenamed
+LazyFrameOriginal.withColumnsRenamed = withColumnsRenamed
 
 LazyFrame = LazyFrameOriginal

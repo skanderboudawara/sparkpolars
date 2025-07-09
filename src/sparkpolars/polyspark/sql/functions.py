@@ -21,6 +21,9 @@ def cast_strict(self, dtype, strict=False):
 Expr.cast = cast_strict
 
 
+def broadcast(df: Any) -> Any:
+    return df
+
 # Add Spark-compatible methods to Polars Expr
 def isNull(self: Expr) -> Expr:
     return self.is_null()
@@ -108,6 +111,11 @@ regexp_like = rlike
 regexp = rlike
 
 
+def between(self, lowerBound, upperBound):
+    return self.ge(lowerBound) & self.le(upperBound)
+
+Expr.between = between
+
 def startswith(str: str | Expr, prefix: str) -> Expr:
     return _str_to_col(str).str.starts_with(prefix)
 
@@ -125,6 +133,7 @@ def substring(str: str | Expr, pos: int, len: int | None = None) -> Expr:
 
 
 substr = substring
+Expr.substr = substr
 
 
 def trim(col: str | Expr, trim: str) -> Expr:
@@ -552,3 +561,5 @@ coalesce = plf.coalesce
 
 def monotonically_increasing_id() -> Expr:
     return plf.int_range(pl.len(), dtype=pl.UInt32)
+
+
