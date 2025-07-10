@@ -92,7 +92,7 @@ jobs:
             rm -rf dist
             mkdir -p dist
             python -c "import setuptools_scm; setuptools_scm.get_version(write_to='src/sparkpolars/_version.py')"
-            shell: bash -el {0}
+          shell: bash -el {0}
         - name: Build Conda Package
           run: |
             conda config --set anaconda_upload no
