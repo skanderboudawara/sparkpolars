@@ -8,8 +8,6 @@ build-backend = "setuptools.build_meta"
 
 
 [tool.setuptools_scm]
-version_scheme = "python-simplified-semver"
-local_scheme = "no-local-version"
 write_to = "src/sparkpolars/_version.py"
 
 [project]
@@ -17,7 +15,6 @@ name = "sparkpolars"
 description = "Conversion between PySpark and Polars DataFrames"
 dynamic = ["version"]
 readme = {file = 'README.md', content-type='text/markdown'}
-license-files = ['LICENSE']
 license = "MIT"
 authors = [{ name = "Skander Boudawara" }]
 keywords = ['pyspark', 'polars', 'conversion', 'spark-to-polars', 'polars-to-spark']
