@@ -6,6 +6,8 @@ playground.ipynb
 playground.py
 # C extensions
 *.so
+_version.py
+*_version.py
 
 # Distribution / packaging
 .Python

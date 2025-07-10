@@ -33,7 +33,7 @@ jobs:
         run: conda install -y conda-build
       - name: Install dependencies
         run: |
-          pip install build twine "setuptools >= 64" "setuptools_scm[toml] >= 6.4" wheel anaconda-auth anaconda
+          pip install build "twine>=4.0.0" "setuptools>=70.0.0" "setuptools_scm[toml]>=6.4" wheel anaconda-auth anaconda
       - name: Prepare Environment
         run: |
           echo "The ref name is ${{ github.ref_name }}"
