@@ -48,7 +48,13 @@ jobs:
         run: |
           python -m build
           python -m twine check dist/*
-          twine upload -p ${{ secrets.TWINE_API_KEY }} dist/*
+          set -e
+          {
+            twine upload -p ${{ secrets.TWINE_API_KEY }} dist/*
+            echo "upload successful"
+          } || {
+            echo "upload failed"
+          }
       - name: Push file to GitHub Release
         run: |
           # List all files to see what was actually built
