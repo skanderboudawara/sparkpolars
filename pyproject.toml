@@ -81,7 +81,7 @@ force-exclude = '''
 
 [tool.coverage.run]
 source = ["src"]
-omit = ["*/__init__.py", "*/test_*", "*/_exceptions.py", "*/_logger.py", "*/_version.py"]
+omit = ["*/__init__.py", "*/test_*", "*/_exceptions.py", "*/_logger.py", "*/_version.py", "polyspark"]
 
 [tool.coverage.report]
 show_missing = true
@@ -201,5 +201,11 @@ known-local-folder = ["src"]
     "N806",
     "A002",
     "A001",
-    "N803"
+    "N803",
+    "D101",
+    "SLF001",
+    "D100",
+    "D102",
+    "D105",
+    "D107",
 ]

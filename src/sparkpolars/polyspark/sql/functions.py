@@ -1,5 +1,6 @@
 """Polars SQL functions for Polyspark."""
 
+import datetime
 from functools import reduce
 from typing import Any
 
@@ -8,12 +9,13 @@ import polars.datatypes as plf_types
 import polars.functions as plf
 from polars import lit
 from polars._utils.parse import parse_into_list_of_expressions
+from polars.datatypes import DataType
 from polars.expr import Expr
 
 Expr._original_cast = Expr.cast
 
 
-def cast_strict(self, dtype, strict=False):
+def cast_strict(self: Expr, dtype: DataType, strict: bool = False) -> Expr:
     # Filter out columns that don't exist
     return self._original_cast(dtype, strict=strict)
 
@@ -23,6 +25,7 @@ Expr.cast = cast_strict
 
 def broadcast(df: Any) -> Any:
     return df
+
 
 # Add Spark-compatible methods to Polars Expr
 def isNull(self: Expr) -> Expr:
@@ -39,7 +42,13 @@ def isin(self: Expr, *cols: Any) -> Expr:
     return self.is_in(cols)
 
 
-def over(self: Expr, partition_by=None, *more_exprs, order_by=None, sort_by=None):
+def over(
+    self: Expr,
+    partition_by: Any = None,
+    *more_exprs: Any,
+    order_by: Any = None,
+    sort_by: Any = None,
+) -> Expr:
     # Handle Window object
     if hasattr(partition_by, "_partition_by"):
         # Extract values from Window object
@@ -89,6 +98,7 @@ col = plf.col
 column = col
 Column = col
 
+
 def _str_to_col(name: str | Expr) -> Expr:
     if isinstance(name, str):
         return col(name)
@@ -106,25 +116,32 @@ Expr.eqNullSafe = eqNullSafe
 def rlike(str: str | Expr, regexp: str) -> Expr:
     return _str_to_col(str).str.contains(regexp, literal=False)
 
+
 Expr.rlike = rlike
 regexp_like = rlike
 regexp = rlike
 
 
-def between(self, lowerBound, upperBound):
+def between(self: Expr, lowerBound: Any, upperBound: Any) -> Expr:
     return self.ge(lowerBound) & self.le(upperBound)
 
+
 Expr.between = between
+
 
 def startswith(str: str | Expr, prefix: str) -> Expr:
     return _str_to_col(str).str.starts_with(prefix)
 
+
 Expr.startswith = startswith
+
 
 def endswith(str: str | Expr, suffix: str) -> Expr:
     return _str_to_col(str).str.ends_with(suffix)
 
+
 Expr.endswith = endswith
+
 
 def substring(str: str | Expr, pos: int, len: int | None = None) -> Expr:
     if len is not None:
@@ -158,10 +175,6 @@ def concat_ws(separator: str, *cols: Any) -> Expr:
 
 def expr(str: str) -> Expr:
     return plf.sql_expr(str)
-
-
-def broadcast(df: Any) -> Any:
-    return df
 
 
 def upper(str: str | Expr) -> Expr:
@@ -240,7 +253,9 @@ def btrim(str: str | Expr, trim: str | None = None) -> Expr:
 def contains(left: str | Expr, right: str | Expr) -> Expr:
     return _str_to_col(left).str.contains(right)
 
+
 Expr.contains = contains
+
 
 def encode(col: str | Expr, charset: str) -> Expr:
     return _str_to_col(col).str.encode(charset)
@@ -563,3 +578,83 @@ def monotonically_increasing_id() -> Expr:
     return plf.int_range(pl.len(), dtype=pl.UInt32)
 
 
+def product(self: str | Expr) -> Expr:
+    self = _str_to_col(self)
+    return self.product()
+
+
+def year(col: str | Expr) -> Expr:
+    col = _str_to_col(col)
+    return col.dt.year()
+
+
+def month(col: str | Expr) -> Expr:
+    col = _str_to_col(col)
+    return col.dt.month()
+
+
+def hour(col: str | Expr) -> Expr:
+    col = _str_to_col(col)
+    return col.dt.hour()
+
+
+def last_day(col: str | Expr) -> Expr:
+    col = _str_to_col(col)
+    return col.dt.month_end()
+
+
+def dayofmonth(col: str | Expr) -> Expr:
+    col = _str_to_col(col)
+    return col.dt.day()
+
+
+def dayofweek(col: str | Expr) -> Expr:
+    col = _str_to_col(col)
+    return col.dt.weekday() + 1  # Spark's dayofweek starts from 1 (Sunday)
+
+
+def dayofyear(col: str | Expr) -> Expr:
+    col = _str_to_col(col)
+    return col.dt.ordinal_day()
+
+
+def current_date() -> Expr:
+    return plf.lit(datetime.datetime.now().date(), dtype=plf_types.Date)  # noqa: DTZ005
+
+
+now = current_date
+curdate = current_date
+
+
+def current_timestamp() -> Expr:
+    return plf.lit(datetime.datetime.now(), dtype=plf_types.Datetime)  # noqa: DTZ005
+
+
+localtimestamp = current_timestamp
+
+
+def date_sub(col: str | Expr, days: int) -> Expr:
+    col = _str_to_col(col)
+    return col.dt.offset_by(f"{days}d")
+
+
+def date_add(col: str | Expr, days: int) -> Expr:
+    col = _str_to_col(col)
+    return col.dt.offset_by(f"{days}d")
+
+
+def datediff(end: str | Expr, start: str | Expr) -> Expr:
+    end = _str_to_col(end)
+    start = _str_to_col(start)
+    return end - start
+
+
+def add_months(col: str | Expr, months: int) -> Expr:
+    col = _str_to_col(col)
+    return col.dt.offset_by(f"{months}M")
+
+
+def sequence(start: int | Expr, stop: int | Expr, step: int | None = None) -> Expr:
+    if step is None:
+        return plf.int_range(start, stop + 1, eager=True)
+    return plf.int_range(start, stop + 1, step=step, eager=True)
