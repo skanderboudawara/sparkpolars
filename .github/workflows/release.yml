@@ -77,12 +77,15 @@ jobs:
           uses: conda-incubator/setup-miniconda@v3
           with:
               python-version: "3.11"
+              activate-environment: build-env
+              environment-file: ""
         - name: Installing conda build
-          run: conda install -y conda-build
+          run: conda install -y conda-build anaconda-client
+          shell: bash -el {0}
         - name: Install dependencies
           run: |
             pip install anaconda-auth anaconda
-            conda install -y conda-build anaconda-client
+          shell: bash -el {0}
         - name: Prepare Environment
           run: |
             echo "The ref name is ${{ github.ref_name }}"
@@ -95,6 +98,7 @@ jobs:
             mkdir -p /tmp/conda-build-work
             conda-build conda_receip/ --package-format=tar.bz2 --output-folder dist --croot /tmp/conda-build-work
             anaconda -t ${{ secrets.ANACONDA_AUTH_API_KEY }} upload dist/noarch/sparkpolars-${{ github.ref_name }}-py_0.tar.bz2
+          shell: bash -el {0}
         - name: Push file to GitHub Release
           run: |
             # Upload conda package if it exists
