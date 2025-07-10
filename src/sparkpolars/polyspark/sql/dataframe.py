@@ -1,15 +1,15 @@
 """Polyspark DataFrame methods for Polars DataFrame and LazyFrame."""
 
+import re
 from typing import Any
 
 from polars import DataFrame as DataFrameOriginal
 from polars import LazyFrame as LazyFrameOriginal
-from polars import concat, lit, col
+from polars import col, concat, lit
 from polars.config import Config
 from polars.expr import Expr
 
 from .functions import _str_to_col
-import re
 
 
 def return_self(
@@ -23,7 +23,7 @@ def return_self(
 DataFrameOriginal._original_drop = DataFrameOriginal.drop
 
 
-def drop_strict(self, *cols, strict=True):
+def drop_strict(self: DataFrameOriginal, *cols: str, strict: bool = True) -> DataFrameOriginal:
     # Filter out columns that don't exist
     existing_cols = [col for col in cols if col in self.columns]
     if not existing_cols:
@@ -37,7 +37,7 @@ DataFrameOriginal.drop = drop_strict
 LazyFrameOriginal._original_drop = LazyFrameOriginal.drop
 
 
-def drop_strict_lazy(self, *cols, strict=True):
+def drop_strict_lazy(self: LazyFrameOriginal, *cols: str, strict: bool = True) -> LazyFrameOriginal:
     # Filter out columns that don't exist
     existing_cols = [col for col in cols if col in self.collect_schema().names()]
     if not existing_cols:
@@ -47,7 +47,6 @@ def drop_strict_lazy(self, *cols, strict=True):
 
 
 LazyFrameOriginal.drop = drop_strict_lazy
-
 
 
 def withColumns(
@@ -70,6 +69,7 @@ def withColumns(
         except AttributeError:
             # If expr doesn't have alias method, wrap it in a column expression
             import polars as pl
+
             aliased_expr = pl.col(expr).alias(name) if isinstance(expr, str) else expr.alias(name)
         return self.with_columns(aliased_expr)
     if kwargs:
@@ -89,8 +89,6 @@ def withColumn(
     expr: Expr,
 ) -> DataFrameOriginal | LazyFrameOriginal:
     return self.withColumns({name: expr})
-
-
 
 
 def persist(
@@ -126,8 +124,6 @@ def dropna(
     raise NotImplementedError(
         msg,
     )
-
-
 
 
 def dropnulls(
@@ -202,7 +198,10 @@ def groupBy(self: DataFrameOriginal | LazyFrameOriginal, *cols: Any) -> Any:
     return self.group_by(*cols)
 
 
-def agg(self: DataFrameOriginal | LazyFrameOriginal, *expr) -> DataFrameOriginal | LazyFrameOriginal:
+def agg(
+    self: DataFrameOriginal | LazyFrameOriginal,
+    *expr: Any,
+) -> DataFrameOriginal | LazyFrameOriginal:
     if len(expr) == 1 and isinstance(expr[0], dict):
         expr_dict = expr[0]
         # Check all keys and values are strings
@@ -214,16 +213,19 @@ def agg(self: DataFrameOriginal | LazyFrameOriginal, *expr) -> DataFrameOriginal
         if not all(v in allowed_aggs for v in expr_dict.values()):
             msg = f"Aggregation functions must be one of {allowed_aggs}."
             raise ValueError(msg)
-        expr = [
-            getattr(col(k), v)().alias(f"{v}({k})")
-            for k, v in expr_dict.items()
-        ]
-    return self.group_by(lit(1).alias("agg_polyspark")).agg(
-        *expr,
-    ).drop("agg_polyspark")
+        expr = [getattr(col(k), v)().alias(f"{v}({k})") for k, v in expr_dict.items()]
+    return (
+        self.group_by(lit(1).alias("agg_polyspark"))
+        .agg(
+            *expr,
+        )
+        .drop("agg_polyspark")
+    )
+
 
 DataFrameOriginal.agg = agg
 LazyFrameOriginal.agg = agg
+
 
 def schema_lazy(self: LazyFrameOriginal) -> Any:
     return self.collect_schema()
@@ -248,7 +250,13 @@ def isEmpty_non_lazy(self: DataFrameOriginal) -> bool:
 def count_non_lazy(self: DataFrameOriginal) -> int:
     return self.height
 
-def show(self, n=20, truncate=True, vertical=False):
+
+def show(
+    self: DataFrameOriginal | LazyFrameOriginal,
+    n: int = 20,
+    truncate: bool = True,
+    vertical: bool = False,
+) -> None:
     if isinstance(self, LazyFrameOriginal):
         self = self.collect()
     if truncate:
@@ -256,28 +264,42 @@ def show(self, n=20, truncate=True, vertical=False):
     else:
         Config.set_fmt_str_lengths(9999)
     if vertical:
-        raise NotImplementedError(
-            "Vertical display is not implemented in Polars DataFrame."
-        )
+        msg = "Vertical display is not implemented in Polars DataFrame."
+        raise NotImplementedError(msg)
     if n < 0:
-        raise ValueError("n must be a non-negative integer.")
-    print(self.head(n))
+        msg = "n must be a non-negative integer."
+        raise ValueError(msg)
 
 
-def not_implemented(self, *args, **kwargs):
-    raise NotImplementedError("This method is not implemented in Polars DataFrame.")
+def not_implemented(self: Any, *args: Any, **kwargs: Any) -> None:
+    msg = "This method is not implemented in Polars DataFrame."
+    raise NotImplementedError(msg)
 
-def colRegex(self, colName: str) -> DataFrameOriginal | LazyFrameOriginal:
+
+def colRegex(
+    self: DataFrameOriginal | LazyFrameOriginal,
+    colName: str,
+) -> DataFrameOriginal | LazyFrameOriginal:
     pattern = re.compile(colName)
     columns = [c for c in self.columns if pattern.search(c)]
     return self.select(columns)
 
-def withColumnRenamed(self, existing, new):
+
+def withColumnRenamed(
+    self: DataFrameOriginal | LazyFrameOriginal,
+    existing: str,
+    new: str,
+) -> DataFrameOriginal | LazyFrameOriginal:
     dict = {existing: new}
     return self.rename(dict, strict=False)
 
-def withColumnsRenamed(self, colsMap):
+
+def withColumnsRenamed(
+    self: DataFrameOriginal | LazyFrameOriginal,
+    colsMap: dict[str, str],
+) -> DataFrameOriginal | LazyFrameOriginal:
     return self.rename(colsMap, strict=False)
+
 
 DataFrameOriginal.withColumn = withColumn
 
