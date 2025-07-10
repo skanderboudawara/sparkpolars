@@ -104,7 +104,7 @@ jobs:
             conda config --set anaconda_upload no
             # Create a temporary work directory outside the project
             mkdir -p /tmp/conda-build-work
-            conda-build conda_receip/ --package-format=tar.bz2 --output-folder dist --croot /tmp/conda-build-work
+            conda-build conda_receip/ --package-format=tar.bz2 --output-folder dist --croot /tmp/conda-build-work --no-test --no-include-recipe
             anaconda -t ${{ secrets.ANACONDA_AUTH_API_KEY }} upload dist/noarch/sparkpolars-${{ github.ref_name }}-py_0.tar.bz2
           shell: bash -el {0}
         - name: Push file to GitHub Release
