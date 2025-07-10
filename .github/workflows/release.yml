@@ -9,6 +9,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+  id-token: write
+
 jobs:
 #   gitleaks:
 #     uses: ./.github/workflows/gitleaks.yml
@@ -60,7 +64,7 @@ jobs:
             gh release upload ${{github.ref_name}} dist/sparkpolars-*-py3-none-any.whl
           fi
         env:
-            GITHUB_TOKEN: ${{ github.TOKEN }}
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   release-conda:
       runs-on: ubuntu-latest
       needs: release-python
@@ -97,5 +101,5 @@ jobs:
               gh release upload ${{github.ref_name}} dist/noarch/sparkpolars-*.tar.bz2
             fi
           env:
-              GITHUB_TOKEN: ${{ github.TOKEN }}
+              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
