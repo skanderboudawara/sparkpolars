@@ -105,8 +105,13 @@ jobs:
             # Create a temporary work directory outside the project
             mkdir -p /tmp/conda-build-work
             conda-build conda_receip/ --package-format=tar.bz2 --output-folder dist --croot /tmp/conda-build-work --no-test --no-include-recipe
-            anaconda -t ${{ secrets.ANACONDA_AUTH_API_KEY }} upload dist/noarch/sparkpolars-${{ github.ref_name }}-py_0.tar.bz2
+            
+            # Upload to anaconda with proper authentication
+            echo "Uploading to anaconda.org..."
+            anaconda -t ${{ secrets.ANACONDA_AUTH_API_KEY }} upload dist/noarch/sparkpolars-${{ github.ref_name }}-py_0.tar.bz2 --force
           shell: bash -el {0}
+          env:
+            ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_AUTH_API_KEY }}
         - name: Push file to GitHub Release
           run: |
             # Upload conda package if it exists
