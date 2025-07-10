@@ -17,8 +17,6 @@ name = "sparkpolars"
 description = "Conversion between PySpark and Polars DataFrames"
 dynamic = ["version"]
 readme = {file = 'README.md', content-type='text/markdown'}
-license = "MIT"
-license-files = ["LICENSE"]
 authors = [{ name = "Skander Boudawara" }]
 keywords = ['pyspark', 'polars', 'conversion', 'spark-to-polars', 'polars-to-spark']
 classifiers = [
