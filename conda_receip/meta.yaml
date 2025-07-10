@@ -17,7 +17,7 @@ package:
   version: "{{ version }}"
 
 source:
-  path: ..
+  path : ../
 
 build:
   number: {{ build_number }}
@@ -27,14 +27,21 @@ build:
 requirements:
   host:
     - pip
-    - python
+    - "python >=3.10"
+    - "setuptools >=64"
+    - setuptools_scm
+    - wheel
   run:
-    - python
+    - "python >=3.10"
+    - "pyspark >=3.3.0"
+    - "polars >=1.0"
 
 about:
-  home: {{ urls.get('Homepage') }}
-  summary: {{ project.get('description') }}
-  dev_url: {{ urls.get('Source') }}
+  home: "{{ urls.get('Homepage') }}"
+  license: MIT
+  license_family: MIT
+  summary: "{{ project.get('description') }}"
+  dev_url: "{{ urls.get('Source') }}"
 
 extra:
   recipe-maintainers:

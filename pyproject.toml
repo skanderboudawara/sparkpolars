@@ -16,7 +16,8 @@ write_to = "src/sparkpolars/_version.py"
 name = "sparkpolars"
 description = "Conversion between PySpark and Polars DataFrames"
 dynamic = ["version"]
-readme = {file = 'README.md', content-type='text/markdown'}
+readme = {file = 'readme.md', content-type='text/markdown'}
+license = "MIT"
 authors = [{ name = "Skander Boudawara" }]
 keywords = ['pyspark', 'polars', 'conversion', 'spark-to-polars', 'polars-to-spark']
 classifiers = [
