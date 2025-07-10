@@ -33,8 +33,6 @@ requirements:
 
 about:
   home: {{ urls.get('Homepage') }}
-  license: MIT
-  license_family: MIT
   summary: {{ project.get('description') }}
   dev_url: {{ urls.get('Source') }}
 
