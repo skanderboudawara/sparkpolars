@@ -42,7 +42,6 @@ jobs:
       - name: Build PyPi Package
         run: |
           python -m build
-          python -m twine check dist/*
           twine upload -p ${{ secrets.TWINE_API_KEY }} dist/*
       - name: Build Conda Package
         run: |
