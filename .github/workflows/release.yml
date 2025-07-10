@@ -82,6 +82,7 @@ jobs:
         - name: Install dependencies
           run: |
             pip install anaconda-auth anaconda
+            conda install -y conda-build anaconda-client
         - name: Prepare Environment
           run: |
             echo "The ref name is ${{ github.ref_name }}"
