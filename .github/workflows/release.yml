@@ -84,13 +84,15 @@ jobs:
           shell: bash -el {0}
         - name: Install dependencies
           run: |
-            pip install anaconda-auth anaconda
+            pip install anaconda-auth anaconda setuptools_scm[toml]
           shell: bash -el {0}
         - name: Prepare Environment
           run: |
             echo "The ref name is ${{ github.ref_name }}"
             rm -rf dist
             mkdir -p dist
+            python -c "import setuptools_scm; setuptools_scm.get_version(write_to='src/sparkpolars/_version.py')"
+            shell: bash -el {0}
         - name: Build Conda Package
           run: |
             conda config --set anaconda_upload no
