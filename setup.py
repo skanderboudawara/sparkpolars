@@ -6,7 +6,7 @@ from setuptools import setup
 
 here = Path(__file__).resolve().parent
 
-long_description = (here / "README.md").read_text(encoding="utf-8")
+long_description = (here / "readme.md").read_text(encoding="utf-8")
 
 setup(
     name="sparkpolars",
