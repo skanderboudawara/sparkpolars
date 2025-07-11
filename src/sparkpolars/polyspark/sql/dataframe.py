@@ -8,7 +8,10 @@ from polars import LazyFrame as LazyFrameOriginal
 from polars import col, concat, lit
 from polars.config import Config
 from polars.expr import Expr
-
+from polars._utils.parse import (
+    parse_into_expression,
+    parse_into_list_of_expressions,
+)
 from .functions import _str_to_col
 
 
@@ -139,13 +142,15 @@ def dropnulls(
         msg,
     )
 
+DataFrameOriginal._original_join_df = DataFrameOriginal.join
+LazyFrameOriginal._original_join_lz = LazyFrameOriginal.join
 
-def join(
-    self: DataFrameOriginal | LazyFrameOriginal,
-    other: DataFrameOriginal | LazyFrameOriginal,
-    on: str | list[str],
+def join_altred_df(
+    self: DataFrameOriginal,
+    other: DataFrameOriginal,
+    on: str | list[str] | None | Expr = None,
     how: str = "inner",
-) -> DataFrameOriginal | LazyFrameOriginal:
+) -> DataFrameOriginal:
     mapping = {
         "inner": "inner",
         "left_outer": "left",
@@ -167,12 +172,111 @@ def join(
                 msg,
             )
         return self.join_where(other, on)
-    on = [on] if isinstance(on, str | Expr) else on
-    on = [_str_to_col(c) if isinstance(c, str) else c for c in on]
-    if not all(isinstance(col, str | Expr) and col.meta.is_column_selection() for col in on):
-        msg = "Join columns must be strings or column expressions and not predicates."
-        raise ValueError(msg)
-    return self.join(other, on=on, how=how, coalesce=coalesce, suffix="_r_polyspark")
+    if on:
+        if how == "cross":
+            msg = "cross join should not pass join keys"
+            raise ValueError(msg)
+        on = [on] if isinstance(on, str | Expr) else on
+        on = [_str_to_col(c) if isinstance(c, str) else c for c in on]
+        if not all(isinstance(col, str | Expr) and col.meta.is_column_selection() for col in on):
+            msg = "Join columns must be strings or column expressions and not predicates."
+            raise ValueError(msg)
+
+    from polars.lazyframe.opt_flags import QueryOptFlags
+
+    return (
+        self.lazy()
+        ._original_join_lz(
+            other=other.lazy(),
+            left_on=None,
+            right_on=None,
+            on=on,
+            how=how,
+            suffix="_r_polyspark",
+            validate="m:m",
+            nulls_equal=False,
+            coalesce=coalesce,
+            maintain_order=None,
+        )
+        .collect(optimizations=QueryOptFlags._eager())
+    )
+
+
+DataFrameOriginal.join = join_altred_df
+
+
+
+def join_altred_lz(
+    self: LazyFrameOriginal,
+    other: LazyFrameOriginal,
+    on: str | list[str] | None | Expr = None,
+    how: str = "inner",
+) -> LazyFrameOriginal:
+    mapping = {
+        "inner": "inner",
+        "left_outer": "left",
+        "leftouter": "left",
+        "right_outer": "right",
+        "rightouter": "right",
+        "left_anti": "anti",
+        "leftanti": "anti",
+        "full": "outer",
+        "fullouter": "outer",
+        "full_outer": "outer",
+    }
+    how = mapping.get(how, how)
+    coalesce = True if how == "full" else None
+    if isinstance(on, Expr) and not on.meta.is_column_selection():
+        if how != "inner":
+            msg = "Join on expressions with predicates is only available in inner joins."
+            raise NotImplementedError(
+                msg,
+            )
+        return self.join_where(other, on)
+
+    maintain_order = "none"
+
+    if how == "cross":
+        if not on:
+            msg = "cross join should not pass join keys"
+            raise ValueError(msg)
+        return self._from_pyldf(
+            self._ldf.join(
+                other._ldf,
+                [],
+                [],
+                True,
+                False,
+                False,
+                how,
+                "_r_polyspark",
+                "m:m",
+                maintain_order,
+            )
+        )
+
+    pyexprs = parse_into_list_of_expressions(on)
+    pyexprs_left = pyexprs
+    pyexprs_right = pyexprs
+
+    return self._from_pyldf(
+        self._ldf.join(
+            other._ldf,
+            pyexprs_left,
+            pyexprs_right,
+            True,
+            False,
+            False,
+            how,
+            "_r_polyspark",
+            "m:m",
+            maintain_order,
+            coalesce,
+        )
+    )
+
+
+LazyFrameOriginal.join = join_altred_lz
 
 
 def unionByName(
@@ -314,7 +418,6 @@ DataFrameOriginal.dropDuplicates = dropDuplicates
 DataFrameOriginal.drop_duplicates = dropDuplicates
 DataFrameOriginal.dropna = dropna
 DataFrameOriginal.dropnulls = dropnulls
-DataFrameOriginal.join = join
 DataFrameOriginal.unionByName = unionByName
 DataFrameOriginal.crossJoin = crossJoin
 DataFrameOriginal.checkpoint = return_self
@@ -357,7 +460,6 @@ LazyFrameOriginal.dropDuplicates = dropDuplicates
 LazyFrameOriginal.drop_duplicates = dropDuplicates
 LazyFrameOriginal.dropna = dropna
 LazyFrameOriginal.dropnulls = dropnulls
-LazyFrameOriginal.join = join
 LazyFrameOriginal.unionByName = unionByName
 LazyFrameOriginal.crossJoin = crossJoin
 LazyFrameOriginal.checkpoint = return_self

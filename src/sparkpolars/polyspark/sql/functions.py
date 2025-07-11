@@ -658,3 +658,21 @@ def sequence(start: int | Expr, stop: int | Expr, step: int | None = None) -> Ex
     if step is None:
         return plf.int_range(start, stop + 1, eager=True)
     return plf.int_range(start, stop + 1, step=step, eager=True)
+
+
+def create_map(dict: dict) -> Expr:
+    return plf.struct(**{k: plf.lit(v) for k, v in dict.items()}).struct.json_encode()
+
+
+def getItem(self: Expr, key: str | Expr) -> Expr:
+    """Extract value from a JSON-encoded map using a key."""
+    import json
+
+    key = _str_to_col(key)
+    return plf.struct([self.alias("json"), key.alias("key")]).map_elements(
+        lambda x: json.loads(x["json"]).get(x["key"]), return_dtype=plf_types.String,
+    )
+
+
+# Add getItem method to Expr class
+Expr.getItem = getItem
