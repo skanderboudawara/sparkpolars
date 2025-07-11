@@ -57,6 +57,15 @@ def withColumns(
     *args: Any,
     **kwargs: Any,
 ) -> DataFrameOriginal | LazyFrameOriginal:
+    for arg in args:
+        key, val = next(iter(arg.items())) if isinstance(arg, dict) else (None, arg)
+        if hasattr(val, "_explode_marker"):
+            # Handle explode expressions
+            col_outer = val._explode_outer
+            if col_outer:
+                self = self.with_columns(col(key).list.drop_nulls().alias(key)).explode(key)
+            else:
+                self = self.explode(key)
     # Support both dictionary and multiple name/expr pairs
     if len(args) == 1 and isinstance(args[0], dict) and not kwargs:
         # Dictionary form: withColumns({"col1": expr1, "col2": expr2})
@@ -66,7 +75,6 @@ def withColumns(
     if len(args) == 2 and not kwargs:
         # Two argument form: withColumns("col_name", expr) - treat as withColumn
         name, expr = args
-        # Ensure expr is properly aliased
         try:
             aliased_expr = expr.alias(name)
         except AttributeError:
