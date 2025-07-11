@@ -7,7 +7,7 @@ from typing import Any
 import polars as pl
 import polars.datatypes as plf_types
 import polars.functions as plf
-from polars import lit
+from polars import DataFrame, lit
 from polars._utils.parse import parse_into_list_of_expressions
 from polars.datatypes import DataType
 from polars.expr import Expr
@@ -561,9 +561,30 @@ def flatten(col: str | Expr) -> Expr:
     return col.flatten()
 
 
+def split(str, pattern, limit=-1) -> Expr:
+    str = _str_to_col(str)
+    if limit <= 0:
+        return str.str.split(pattern)
+    return str.str.split(pattern).list.head(limit)
+
+
 def explode(col: str | Expr) -> Expr:
-    col = _str_to_col(col)
-    return col.list.drop_nulls().explode()
+    """Mark an expression as needing explode treatment."""
+    col_expr = _str_to_col(col)
+    # Add a special marker to indicate this should use DataFrame.explode()
+    col_expr._explode_marker = True
+    col_expr._explode_outer = False
+    col_expr._explode_column = col if isinstance(col, str) else col.name
+    return col_expr
+
+def explode_outer(col: str | Expr) -> Expr:
+    """Mark an expression as needing explode treatment with outer join."""
+    col_expr = _str_to_col(col)
+    # Add a special marker to indicate this should use DataFrame.explode()
+    col_expr._explode_marker = True
+    col_expr._explode_outer = True
+    col_expr._explode_column = col if isinstance(col, str) else col.name
+    return col_expr
 
 
 def count(col: str | Expr) -> Expr:
@@ -676,3 +697,4 @@ def getItem(self: Expr, key: str | Expr) -> Expr:
 
 # Add getItem method to Expr class
 Expr.getItem = getItem
+
