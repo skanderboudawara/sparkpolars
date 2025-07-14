@@ -63,7 +63,7 @@ def withColumns(
             # Handle explode expressions
             col_outer = val._explode_outer
             if col_outer:
-                self = self.with_columns(col(key).list.drop_nulls().alias(key)).explode(key)
+                self = self.with_columns(val.list.drop_nulls().alias(key)).explode(key)
             else:
                 self = self.explode(key)
     # Support both dictionary and multiple name/expr pairs
