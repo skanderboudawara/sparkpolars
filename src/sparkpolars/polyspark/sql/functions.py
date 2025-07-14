@@ -167,6 +167,7 @@ def concat_ws(separator: str, *cols: Any) -> Expr:
         if hasattr(c, "_expr"):
             exprs.append(c)
         else:
+            c = _str_to_col(c)
             exprs.append(c)
     if len(exprs) == 1:
         return exprs[0].list.join(separator)
