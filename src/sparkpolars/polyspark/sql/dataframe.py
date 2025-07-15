@@ -5,7 +5,7 @@ from typing import Any
 
 from polars import DataFrame as DataFrameOriginal
 from polars import LazyFrame as LazyFrameOriginal
-from polars import QueryOptFlags, col, concat, lit
+from polars import col, concat, lit
 from polars._utils.parse import (
     parse_into_list_of_expressions,
 )
@@ -192,22 +192,23 @@ def join_altred_df(
             msg = "Join columns must be strings or column expressions and not predicates."
             raise ValueError(msg)
 
-    return (
-        self.lazy()
-        ._original_join_lz(
-            other=other.lazy(),
-            left_on=None,
-            right_on=None,
-            on=on,
-            how=how,
-            suffix="_r_polyspark",
-            validate="m:m",
-            nulls_equal=False,
-            coalesce=coalesce,
-            maintain_order=None,
-        )
-        .collect(optimizations=QueryOptFlags._eager())
+    self = self.lazy()._original_join_lz(
+        other=other.lazy(),
+        left_on=None,
+        right_on=None,
+        on=on,
+        how=how,
+        suffix="_r_polyspark",
+        validate="m:m",
+        nulls_equal=False,
+        coalesce=coalesce,
+        maintain_order=None,
     )
+    try:
+        from polars import QueryOptFlags
+        return self.collect(optimizations=QueryOptFlags._eager())
+    except Exception as e:
+        return self.collect(_eager=True)
 
 
 DataFrameOriginal.join = join_altred_df
