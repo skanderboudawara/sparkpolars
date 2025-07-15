@@ -160,8 +160,6 @@ def trim(col: str | Expr, trim: str) -> Expr:
 
 
 class SparkWhen:
-    """Wrapper class to support Spark-like when().when().otherwise() chaining."""
-
     def __init__(self, condition: Expr, value: Any) -> None:
         self._when_expr = plf.when(condition).then(value)
 
@@ -171,6 +169,9 @@ class SparkWhen:
 
     def otherwise(self, value: Any) -> Expr:
         return self._when_expr.otherwise(value)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._when_expr, name)
 
 
 def when(condition: Expr, value: Any) -> SparkWhen:
