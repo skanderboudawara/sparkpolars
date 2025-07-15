@@ -695,9 +695,11 @@ def add_months(col: str | Expr, months: int) -> Expr:
 
 
 def sequence(start: int | Expr, stop: int | Expr, step: int | None = None) -> Expr:
+    start = _str_to_col(start)
+    stop = _str_to_col(stop)
     if step is None:
-        return plf.int_range(start, stop + 1, eager=True)
-    return plf.int_range(start, stop + 1, step=step, eager=True)
+        return plf.int_ranges(start, stop + 1)
+    return plf.int_ranges(start, stop + 1, step=step)
 
 
 def create_map(dict: dict) -> Expr:
