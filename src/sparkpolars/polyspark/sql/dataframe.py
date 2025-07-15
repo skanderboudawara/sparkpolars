@@ -6,12 +6,12 @@ from typing import Any
 from polars import DataFrame as DataFrameOriginal
 from polars import LazyFrame as LazyFrameOriginal
 from polars import col, concat, lit
-from polars.config import Config
-from polars.expr import Expr
 from polars._utils.parse import (
-    parse_into_expression,
     parse_into_list_of_expressions,
 )
+from polars.config import Config
+from polars.expr import Expr
+
 from .functions import _str_to_col
 
 
@@ -150,13 +150,15 @@ def dropnulls(
         msg,
     )
 
+
 DataFrameOriginal._original_join_df = DataFrameOriginal.join
 LazyFrameOriginal._original_join_lz = LazyFrameOriginal.join
+
 
 def join_altred_df(
     self: DataFrameOriginal,
     other: DataFrameOriginal,
-    on: str | list[str] | None | Expr = None,
+    on: str | list[str] | Expr | None = None,
     how: str = "inner",
 ) -> DataFrameOriginal:
     mapping = {
@@ -213,11 +215,10 @@ def join_altred_df(
 DataFrameOriginal.join = join_altred_df
 
 
-
 def join_altred_lz(
     self: LazyFrameOriginal,
     other: LazyFrameOriginal,
-    on: str | list[str] | None | Expr = None,
+    on: str | list[str] | Expr | None = None,
     how: str = "inner",
 ) -> LazyFrameOriginal:
     mapping = {
@@ -260,7 +261,7 @@ def join_altred_lz(
                 "_r_polyspark",
                 "m:m",
                 maintain_order,
-            )
+            ),
         )
 
     pyexprs = parse_into_list_of_expressions(on)
@@ -280,7 +281,7 @@ def join_altred_lz(
             "m:m",
             maintain_order,
             coalesce,
-        )
+        ),
     )
 
 
@@ -440,6 +441,7 @@ DataFrameOriginal.crosstab = not_implemented
 DataFrameOriginal.cube = not_implemented
 DataFrameOriginal.withColumnRenamed = withColumnRenamed
 DataFrameOriginal.withColumnsRenamed = withColumnsRenamed
+DataFrameOriginal.spark_session = None
 
 DataFrameOriginal.isEmpty = isEmpty_non_lazy
 DataFrameOriginal.count = property(count_non_lazy)
@@ -477,5 +479,6 @@ LazyFrameOriginal.colRegex = colRegex
 LazyFrameOriginal.show = show
 LazyFrameOriginal.withColumnRenamed = withColumnRenamed
 LazyFrameOriginal.withColumnsRenamed = withColumnsRenamed
+LazyFrameOriginal.spark_session = None
 
 LazyFrame = LazyFrameOriginal

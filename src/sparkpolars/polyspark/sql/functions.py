@@ -1,13 +1,15 @@
 """Polars SQL functions for Polyspark."""
 
 import datetime
+import hashlib
+from collections.abc import Callable
 from functools import reduce
 from typing import Any
 
 import polars as pl
 import polars.datatypes as plf_types
 import polars.functions as plf
-from polars import DataFrame, lit
+from polars import lit
 from polars._utils.parse import parse_into_list_of_expressions
 from polars.datatypes import DataType
 from polars.expr import Expr
@@ -167,8 +169,8 @@ def concat_ws(separator: str, *cols: Any) -> Expr:
         if hasattr(c, "_expr"):
             exprs.append(c)
         else:
-            c = _str_to_col(c)
-            exprs.append(c)
+            c_ = _str_to_col(c)
+            exprs.append(c_)
     if len(exprs) == 1:
         return exprs[0].list.join(separator)
     return plf.concat_str(*exprs, separator=separator)
@@ -562,7 +564,7 @@ def flatten(col: str | Expr) -> Expr:
     return col.flatten()
 
 
-def split(str, pattern, limit=-1) -> Expr:
+def split(str: Expr | str, pattern: str | Expr, limit: int = -1) -> Expr:
     str = _str_to_col(str)
     if limit <= 0:
         return str.str.split(pattern)
@@ -577,6 +579,7 @@ def explode(col: str | Expr) -> Expr:
     col_expr._explode_outer = False
     col_expr._explode_column = col if isinstance(col, str) else col.name
     return col_expr
+
 
 def explode_outer(col: str | Expr) -> Expr:
     """Mark an expression as needing explode treatment with outer join."""
@@ -692,10 +695,60 @@ def getItem(self: Expr, key: str | Expr) -> Expr:
 
     key = _str_to_col(key)
     return plf.struct([self.alias("json"), key.alias("key")]).map_elements(
-        lambda x: json.loads(x["json"]).get(x["key"]), return_dtype=plf_types.String,
+        lambda x: json.loads(x["json"]).get(x["key"]),
+        return_dtype=plf_types.String,
     )
 
 
 # Add getItem method to Expr class
 Expr.getItem = getItem
 
+
+def md5(col: str | Expr) -> Expr:
+    col = _str_to_col(col)
+    return col.map_elements(
+        lambda x: hashlib.md5(str(x).encode()).hexdigest() if x is not None else None,  # noqa: S324
+        plf_types.String(),
+    )
+
+
+def sha1(col: str | Expr) -> Expr:
+    col = _str_to_col(col)
+    return col.map_elements(
+        lambda x: (
+            hashlib.sha1(str(x).encode()).hexdigest() if x is not None else None  # noqa: S324
+        ),
+        plf_types.String(),
+    )
+
+
+def sha256(col: str | Expr) -> Expr:
+    col = _str_to_col(col)
+    return col.map_elements(
+        lambda x: hashlib.sha256(str(x).encode()).hexdigest() if x is not None else None,
+        plf_types.String(),
+    )
+
+
+def transform(col: str | Expr, f: Callable) -> Expr:
+    """Transform each element in a list column using a function."""
+    col = _str_to_col(col)
+    return col.list.eval(f(pl.element()))
+
+
+def filter(col: str | Expr, f: Callable) -> Expr:
+    """Filter elements in a list column based on a predicate."""
+    col = _str_to_col(col)
+    return col.list.eval(pl.element().filter(f(pl.element())))
+
+
+def forall(col: str | Expr, f: Callable) -> Expr:
+    """Check if all elements in a list column satisfy a predicate."""
+    col = _str_to_col(col)
+    return col.list.eval(f(pl.element())).list.all()
+
+
+def reverse(col: str | Expr) -> Expr:
+    """Reverse the order of elements in a list column."""
+    col = _str_to_col(col)
+    return col.str.reverse()
