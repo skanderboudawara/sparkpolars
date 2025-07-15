@@ -159,8 +159,22 @@ def trim(col: str | Expr, trim: str) -> Expr:
     return _str_to_col(col).str.strip_chars(trim)
 
 
-def when(condition: Expr, value: Any) -> Expr:
-    return plf.when(condition).then(value)
+class SparkWhen:
+    """Wrapper class to support Spark-like when().when().otherwise() chaining."""
+
+    def __init__(self, condition: Expr, value: Any) -> None:
+        self._when_expr = plf.when(condition).then(value)
+
+    def when(self, condition: Expr, value: Any) -> "SparkWhen":
+        self._when_expr = self._when_expr.when(condition).then(value)
+        return self
+
+    def otherwise(self, value: Any) -> Expr:
+        return self._when_expr.otherwise(value)
+
+
+def when(condition: Expr, value: Any) -> SparkWhen:
+    return SparkWhen(condition, value)
 
 
 def concat_ws(separator: str, *cols: Any) -> Expr:
