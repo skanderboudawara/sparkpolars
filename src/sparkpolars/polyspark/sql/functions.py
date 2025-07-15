@@ -615,7 +615,7 @@ coalesce = plf.coalesce
 
 
 def monotonically_increasing_id() -> Expr:
-    return plf.int_range(pl.len(), dtype=pl.UInt32)
+    return plf.int_range(pl.len(), dtype=pl.UInt64)
 
 
 def product(self: str | Expr) -> Expr:
