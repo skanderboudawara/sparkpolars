@@ -160,6 +160,8 @@ def join_altred_df(
     other: DataFrameOriginal,
     on: str | list[str] | Expr | None = None,
     how: str = "inner",
+    *args: Any,
+    **kwargs: Any,
 ) -> DataFrameOriginal:
     mapping = {
         "inner": "inner",
@@ -194,15 +196,10 @@ def join_altred_df(
 
     self = self.lazy()._original_join_lz(
         other=other.lazy(),
-        left_on=None,
-        right_on=None,
         on=on,
         how=how,
         suffix="_r_polyspark",
-        validate="m:m",
-        nulls_equal=False,
         coalesce=coalesce,
-        maintain_order=None,
     )
     try:
         from polars import QueryOptFlags
@@ -219,6 +216,8 @@ def join_altred_lz(
     other: LazyFrameOriginal,
     on: str | list[str] | Expr | None = None,
     how: str = "inner",
+    *args: Any,
+    **kwargs: Any,
 ) -> LazyFrameOriginal:
     mapping = {
         "inner": "inner",
@@ -242,47 +241,13 @@ def join_altred_lz(
             )
         return self.join_where(other, on)
 
-    maintain_order = "none"
-
-    if how == "cross":
-        if not on:
-            msg = "cross join should not pass join keys"
-            raise ValueError(msg)
-        return self._from_pyldf(
-            self._ldf.join(
-                other._ldf,
-                [],
-                [],
-                True,
-                False,
-                False,
-                how,
-                "_r_polyspark",
-                "m:m",
-                maintain_order,
-            ),
-        )
-
-    pyexprs = parse_into_list_of_expressions(on)
-    pyexprs_left = pyexprs
-    pyexprs_right = pyexprs
-
-    return self._from_pyldf(
-        self._ldf.join(
-            other._ldf,
-            pyexprs_left,
-            pyexprs_right,
-            True,
-            False,
-            False,
-            how,
-            "_r_polyspark",
-            "m:m",
-            maintain_order,
-            coalesce,
-        ),
+    return self._original_join_lz(
+        other=other,
+        on=on,
+        how=how,
+        suffix="_r_polyspark",
+        coalesce=coalesce,
     )
-
 
 LazyFrameOriginal.join = join_altred_lz
 
@@ -294,7 +259,7 @@ def unionByName(
 ) -> DataFrameOriginal | LazyFrameOriginal:
     return concat(
         [self, other],
-        how="diagonal_relaxed" if allowMissingColumns else "vertical_relaxed",
+        how="diagonal_relaxed" if allowMissingColumns else "align",
     )
 
 
@@ -428,7 +393,9 @@ DataFrameOriginal.dropna = dropna
 DataFrameOriginal.dropnulls = dropnulls
 DataFrameOriginal.unionByName = unionByName
 DataFrameOriginal.crossJoin = crossJoin
+DataFrameOriginal.collect = return_self
 DataFrameOriginal.checkpoint = return_self
+DataFrameOriginal.cache = return_self
 DataFrameOriginal.localCheckpoint = return_self
 DataFrameOriginal.groupBy = groupBy
 DataFrameOriginal.show = show
