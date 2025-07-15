@@ -5,7 +5,7 @@ from typing import Any
 
 from polars import DataFrame as DataFrameOriginal
 from polars import LazyFrame as LazyFrameOriginal
-from polars import col, concat, lit
+from polars import QueryOptFlags, col, concat, lit
 from polars._utils.parse import (
     parse_into_list_of_expressions,
 )
@@ -191,8 +191,6 @@ def join_altred_df(
         if not all(isinstance(col, str | Expr) and col.meta.is_column_selection() for col in on):
             msg = "Join columns must be strings or column expressions and not predicates."
             raise ValueError(msg)
-
-    from polars.lazyframe.opt_flags import QueryOptFlags
 
     return (
         self.lazy()
