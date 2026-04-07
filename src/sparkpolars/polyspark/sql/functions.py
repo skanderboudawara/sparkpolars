@@ -815,29 +815,32 @@ def array_repeat(element: Any, count: int) -> Expr:
 
 # ── window / ranking functions ────────────────────────────────────────────────
 
-def row_number() -> Expr:
-    """Row number (1-based) within the current window partition."""
-    return polars_functions.int_range(pl.len(), dtype=polars_datatypes.Int64()) + 1
+from .window import _WindowFuncExpr  # noqa: E402
 
 
-def rank(col: str | Expr) -> Expr:
-    """Min rank of col values within the current window partition."""
-    return _str_to_col(col).rank("min").cast(polars_datatypes.Int64())
+def row_number() -> _WindowFuncExpr:
+    """Row number (1-based) within the window partition, ordered by orderBy."""
+    return _WindowFuncExpr("row_number")
 
 
-def dense_rank(col: str | Expr) -> Expr:
-    """Dense rank of col values within the current window partition."""
-    return _str_to_col(col).rank("dense").cast(polars_datatypes.Int64())
+def rank() -> _WindowFuncExpr:
+    """Min rank within the window partition (ties share the lowest rank)."""
+    return _WindowFuncExpr("rank")
 
 
-def lag(col: str | Expr, offset: int = 1, default: Any = None) -> Expr:
-    """Shift col values forward by offset rows."""
-    return _str_to_col(col).lag(offset, default)
+def dense_rank() -> _WindowFuncExpr:
+    """Dense rank within the window partition (no gaps after ties)."""
+    return _WindowFuncExpr("dense_rank")
 
 
-def lead(col: str | Expr, offset: int = 1, default: Any = None) -> Expr:
-    """Shift col values backward by offset rows."""
-    return _str_to_col(col).lead(offset, default)
+def lag(col: str | Expr, offset: int = 1, default: Any = None) -> _WindowFuncExpr:
+    """Value of *col* offset rows before the current row within the partition."""
+    return _WindowFuncExpr("lag", _str_to_col(col), offset, default)
+
+
+def lead(col: str | Expr, offset: int = 1, default: Any = None) -> _WindowFuncExpr:
+    """Value of *col* offset rows after the current row within the partition."""
+    return _WindowFuncExpr("lead", _str_to_col(col), offset, default)
 
 
 # ── math extras ───────────────────────────────────────────────────────────────
@@ -1403,27 +1406,19 @@ def mean(col: str | Expr) -> Expr:
     return _str_to_col(col).mean()
 
 
-def ntile(n: int) -> Expr:
+def ntile(n: int) -> _WindowFuncExpr:
     """Divide the ordered partition into *n* buckets (1-based)."""
-    length = polars_functions.len()
-    rank = polars_functions.int_range(start=0, end=length, dtype=polars_datatypes.Int64())
-    return (rank * n // length + 1).cast(polars_datatypes.Int32())
+    return _WindowFuncExpr("ntile", n)
 
 
-def cume_dist() -> Expr:
-    """Cumulative distribution: (rank) / total rows."""
-    length = polars_functions.len()
-    rank = polars_functions.int_range(start=1, end=length + 1, dtype=polars_datatypes.Int64())
-    return rank.cast(polars_datatypes.Float64()) / length.cast(polars_datatypes.Float64())
+def cume_dist() -> _WindowFuncExpr:
+    """Cumulative distribution: position / total rows within the partition."""
+    return _WindowFuncExpr("cume_dist")
 
 
-def percent_rank() -> Expr:
+def percent_rank() -> _WindowFuncExpr:
     """Percent rank: (rank - 1) / (total - 1), 0.0 when only one row."""
-    length = polars_functions.len()
-    rank = polars_functions.int_range(start=0, end=length, dtype=polars_datatypes.Int64())
-    return pl.when(length <= 1).then(pl.lit(0.0)).otherwise(
-        rank.cast(polars_datatypes.Float64()) / (length - 1).cast(polars_datatypes.Float64())
-    )
+    return _WindowFuncExpr("percent_rank")
 
 
 # ── struct / map extras (batch 3) ─────────────────────────────────────────────

@@ -301,11 +301,38 @@ def over(
     order_by: Any = None,
     sort_by: Any = None,
 ) -> Expr:
+    from .window import WindowSpec, _to_pyexprs  # noqa: PLC0415
+
+    # ── WindowSpec (new API) ──────────────────────────────────────────────────
+    if isinstance(partition_by, WindowSpec):
+        ws: WindowSpec = partition_by
+        pb = ws._partition_by
+        ob = ws._order_by
+        desc = ws._order_by_desc
+
+        if not pb and not ob:
+            return self
+
+        if pb:
+            # Use the saved original Polars .over() — it properly handles Sequence[bool]
+            if ob:
+                return self._polars_over(
+                    pb,
+                    order_by=ob,
+                    descending=desc[0] if desc else False,
+                    mapping_strategy="group_to_rows",
+                )
+            return self._polars_over(pb, mapping_strategy="group_to_rows")
+
+        # only order_by, no partition
+        return self.sort_by(ob, descending=desc)
+
+    # ── legacy WindowClass / raw columns ─────────────────────────────────────
     if hasattr(partition_by, "_partition_by"):
         window_partition_by = partition_by._partition_by
         window_order_by = partition_by._order_by
         window_sort_by = partition_by._sort_by
-        if partition_by._partition_by is not None:
+        if window_partition_by is not None:
             partition_by = window_partition_by
         if order_by is None and window_order_by is not None:
             order_by = window_order_by
@@ -334,6 +361,7 @@ def over(
     return result
 
 
+Expr._polars_over = Expr.over  # keep a reference to the real Polars .over() for internal use
 Expr.over = over
 
 

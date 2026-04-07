@@ -814,40 +814,112 @@ def test_sf_array_repeat():
 
 # ── window / ranking functions ────────────────────────────────────────────────
 
+from src.sparkpolars.polyspark.sql.window import Window, WindowSpec  # noqa: E402
+
+
 def test_sf_row_number():
     df = pl.DataFrame({"x": [10, 20, 30]})
-    result = df.select(sf.row_number().alias("rn"))["rn"].to_list()
+    result = df.select(sf.row_number().over(WindowSpec()).alias("rn"))["rn"].to_list()
     assert result == [1, 2, 3]
+
+
+def test_sf_row_number_with_partition():
+    df = pl.DataFrame({"dept": ["A", "A", "B", "B"], "sal": [100, 200, 300, 100]})
+    result = df.select(
+        sf.row_number().over(Window.partitionBy("dept").orderBy("sal")).alias("rn")
+    )["rn"].to_list()
+    # Within A (asc sal): 100→1, 200→2
+    # Within B (asc sal): sal=300 is 2nd (100 < 300), sal=100 is 1st
+    assert result == [1, 2, 2, 1]
 
 
 def test_sf_rank():
     df = pl.DataFrame({"x": [3, 1, 2, 1]})
-    result = df.select(sf.rank(pl.col("x")).alias("r"))["r"].to_list()
+    result = df.select(sf.rank().over(Window.orderBy("x")).alias("r"))["r"].to_list()
     assert sorted(result) == [1, 1, 3, 4]
+
+
+def test_sf_rank_with_partition():
+    df = pl.DataFrame({"dept": ["A", "A", "A", "B", "B"], "sal": [100, 200, 100, 300, 300]})
+    result = df.select(
+        sf.rank().over(Window.partitionBy("dept").orderBy("sal")).alias("r")
+    )["r"].to_list()
+    # A values in order: [100, 200, 100] → rank("min"): 100→1, 200→3, 100→1
+    # B values in order: [300, 300] → rank("min"): 300→1, 300→1
+    assert result == [1, 3, 1, 1, 1]
 
 
 def test_sf_dense_rank():
     df = pl.DataFrame({"x": [3, 1, 2, 1]})
-    result = df.select(sf.dense_rank(pl.col("x")).alias("r"))["r"].to_list()
+    result = df.select(sf.dense_rank().over(Window.orderBy("x")).alias("r"))["r"].to_list()
     assert sorted(result) == [1, 1, 2, 3]
+
+
+def test_sf_dense_rank_with_partition():
+    df = pl.DataFrame({"dept": ["A", "A", "A", "B", "B"], "sal": [100, 200, 100, 300, 300]})
+    result = df.select(
+        sf.dense_rank().over(Window.partitionBy("dept").orderBy("sal")).alias("r")
+    )["r"].to_list()
+    # A values in order: [100, 200, 100] → dense_rank: 100→1, 200→2, 100→1
+    # B values in order: [300, 300] → dense_rank: 300→1, 300→1
+    assert result == [1, 2, 1, 1, 1]
 
 
 def test_sf_lag():
     df = pl.DataFrame({"x": [1, 2, 3, 4]})
-    result = df.select(sf.lag(pl.col("x"), 1).alias("l"))["l"].to_list()
+    result = df.select(sf.lag(pl.col("x"), 1).over(WindowSpec()).alias("l"))["l"].to_list()
     assert result == [None, 1, 2, 3]
 
 
 def test_sf_lead():
     df = pl.DataFrame({"x": [1, 2, 3, 4]})
-    result = df.select(sf.lead(pl.col("x"), 1).alias("l"))["l"].to_list()
+    result = df.select(sf.lead(pl.col("x"), 1).over(WindowSpec()).alias("l"))["l"].to_list()
     assert result == [2, 3, 4, None]
 
 
 def test_sf_lag_default():
     df = pl.DataFrame({"x": [1, 2, 3]})
-    result = df.select(sf.lag(pl.col("x"), 1, 0).alias("l"))["l"].to_list()
+    result = df.select(sf.lag(pl.col("x"), 1, 0).over(WindowSpec()).alias("l"))["l"].to_list()
     assert result == [0, 1, 2]
+
+
+def test_sf_lag_with_partition():
+    df = pl.DataFrame({"dept": ["A", "A", "B", "B"], "sal": [100, 200, 300, 400]})
+    result = df.select(
+        sf.lag("sal", 1).over(Window.partitionBy("dept")).alias("prev")
+    )["prev"].to_list()
+    # A: None,100 ; B: None,300
+    assert result == [None, 100, None, 300]
+
+
+def test_window_sum_over_partition():
+    """Regular aggregate Expr.over(WindowSpec) should work."""
+    df = pl.DataFrame({"dept": ["A", "A", "B", "B"], "sal": [100, 200, 300, 400]})
+    result = df.select(
+        pl.col("sal").sum().over(Window.partitionBy("dept")).alias("total")
+    )["total"].to_list()
+    assert result == [300, 300, 700, 700]
+
+
+def test_window_avg_over_partition_orderby():
+    """Aggregate .over() with orderBy in WindowSpec."""
+    df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+    result = df.select(
+        pl.col("sal").mean().over(Window.partitionBy("dept")).alias("avg_sal")
+    )["avg_sal"].to_list()
+    assert result == [150.0, 150.0, 300.0]
+
+
+def test_window_desc_order():
+    """orderBy with desc() should propagate descending flag."""
+    df = pl.DataFrame({"dept": ["A", "A", "A"], "sal": [100, 200, 300]})
+    result = df.select(
+        sf.row_number().over(
+            Window.partitionBy("dept").orderBy(pl.col("sal").desc())
+        ).alias("rn")
+    )["rn"].to_list()
+    # descending: 300→1, 200→2, 100→3
+    assert result == [3, 2, 1]
 
 
 # ── math extras ───────────────────────────────────────────────────────────────
@@ -1344,19 +1416,19 @@ def test_sf_mean():
 
 def test_sf_ntile():
     df = pl.DataFrame({"x": [1, 2, 3, 4]})
-    result = df.select(sf.ntile(2).alias("t"))["t"].to_list()
+    result = df.select(sf.ntile(2).over(WindowSpec()).alias("t"))["t"].to_list()
     assert result == [1, 1, 2, 2]
 
 
 def test_sf_cume_dist():
     df = pl.DataFrame({"x": [1, 2, 3, 4]})
-    result = df.select(sf.cume_dist().alias("c"))["c"].to_list()
+    result = df.select(sf.cume_dist().over(WindowSpec()).alias("c"))["c"].to_list()
     assert result == [0.25, 0.5, 0.75, 1.0]
 
 
 def test_sf_percent_rank():
     df = pl.DataFrame({"x": [1, 2, 3, 4]})
-    result = df.select(sf.percent_rank().alias("p"))["p"].to_list()
+    result = df.select(sf.percent_rank().over(WindowSpec()).alias("p"))["p"].to_list()
     expected = [0.0, 1 / 3, 2 / 3, 1.0]
     for a, b in zip(result, expected):
         assert abs(a - b) < 1e-9
