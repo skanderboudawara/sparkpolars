@@ -8,7 +8,7 @@ playground.py
 *.so
 _version.py
 *_version.py
-
+.claude/
 # Distribution / packaging
 .Python
 build/
