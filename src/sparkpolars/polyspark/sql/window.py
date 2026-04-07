@@ -1,13 +1,13 @@
 from collections.abc import Iterator
 from typing import Any
 
-import polars.functions as plf
+import polars.functions as polars_functions
 
 
 class WindowClass:
 
     def __init__(self) -> None:
-        self._partition_by = plf.all()
+        self._partition_by = polars_functions.all()
         self._order_by = None
         self._sort_by = None
 

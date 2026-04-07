@@ -7,8 +7,8 @@ from functools import reduce
 from typing import Any
 
 import polars as pl
-import polars.datatypes as plf_types
-import polars.functions as plf
+import polars.datatypes as polars_datatypes
+import polars.functions as polars_functions
 from polars import lit
 from polars._utils.parse import parse_into_list_of_expressions
 from polars.datatypes import DataType
@@ -96,7 +96,7 @@ Expr.isNotNull = isNotNull
 Expr.isin = isin
 Expr.over = over
 
-col = plf.col
+col = polars_functions.col
 column = col
 Column = col
 
@@ -131,6 +131,22 @@ def between(self: Expr, lowerBound: Any, upperBound: Any) -> Expr:
 Expr.between = between
 
 
+def outer(self: Expr) -> Expr:
+    """No-op marker for PySpark correlated-subquery syntax.
+
+    PySpark uses ``col("x").outer()`` to reference an outer-query column from
+    inside a correlated subquery.  Polars has no correlated-subquery concept at
+    the DataFrame API level — correlated EXISTS/NOT-EXISTS must be rewritten as
+    semi/anti joins.  This no-op allows code that calls ``.outer()`` to import
+    and run without immediately raising an AttributeError, while the actual
+    correlation logic must be expressed as a join.
+    """
+    return self
+
+
+Expr.outer = outer
+
+
 def startswith(str: str | Expr, prefix: str) -> Expr:
     return _str_to_col(str).str.starts_with(prefix)
 
@@ -161,7 +177,7 @@ def trim(col: str | Expr, trim: str) -> Expr:
 
 class SparkWhen:
     def __init__(self, condition: Expr, value: Any) -> None:
-        self._when_expr = plf.when(condition).then(value)
+        self._when_expr = polars_functions.when(condition).then(value)
 
     def when(self, condition: Expr, value: Any) -> "SparkWhen":
         self._when_expr = self._when_expr.when(condition).then(value)
@@ -188,11 +204,11 @@ def concat_ws(separator: str, *cols: Any) -> Expr:
             exprs.append(c_)
     if len(exprs) == 1:
         return exprs[0].list.join(separator)
-    return plf.concat_str(*exprs, separator=separator)
+    return polars_functions.concat_str(*exprs, separator=separator)
 
 
 def expr(str: str) -> Expr:
-    return plf.sql_expr(str)
+    return polars_functions.sql_expr(str)
 
 
 def upper(str: str | Expr) -> Expr:
@@ -304,14 +320,14 @@ position = locate
 
 def repeat(col: str | Expr, n: int) -> Expr:
     return reduce(
-        lambda acc, _: acc + col.cast(plf_types.String(), strict=False),
+        lambda acc, _: acc + col.cast(polars_datatypes.String(), strict=False),
         range(n - 1),
-        col.cast(plf_types.String(), strict=False),
+        col.cast(polars_datatypes.String(), strict=False),
     )
 
 
 def concat(*cols: str | Expr) -> Expr:
-    return reduce(lambda acc, col: acc + col.cast(plf_types.String(), strict=False), cols)
+    return reduce(lambda acc, col: acc + col.cast(polars_datatypes.String(), strict=False), cols)
 
 
 def round(col: str | Expr, scale: int = 0) -> Expr:
@@ -343,7 +359,7 @@ def translate(srcCol: str | Expr, matching: str, replace: str) -> Expr:
         msg = "Matching and replace strings must have the same length."
         raise ValueError(msg)
     trans_table = str.maketrans(matching, replace)
-    return srcCol.map_elements(lambda x: x.translate(trans_table), plf_types.String())
+    return srcCol.map_elements(lambda x: x.translate(trans_table), polars_datatypes.String())
 
 
 def collect_list(col: str | Expr) -> Expr:
@@ -412,12 +428,12 @@ def array_distinct(col: str | Expr) -> Expr:
 
 def greatest(*cols: str | Expr) -> Expr:
     cols = [_str_to_col(col) for col in cols]
-    return plf.max_horizontal(*cols)
+    return polars_functions.max_horizontal(*cols)
 
 
 def least(*cols: str | Expr) -> Expr:
     cols = [_str_to_col(col) for col in cols]
-    return plf.min_horizontal(*cols)
+    return polars_functions.min_horizontal(*cols)
 
 
 def _get_desc_status(self: Expr) -> bool:
@@ -469,9 +485,9 @@ def desc_nulls_last(col: str | Expr) -> Expr:
 
 def array(*cols: str | Expr) -> Expr:
     if not cols:
-        return plf.concat_list(plf.lit([]))
+        return polars_functions.concat_list(polars_functions.lit([]))
     cols = [_str_to_col(col) for col in cols]
-    return plf.concat_list(*cols)
+    return polars_functions.concat_list(*cols)
 
 
 def array_append(col: str | Expr, value: Any) -> Expr:
@@ -510,12 +526,12 @@ def array_join(col: str | Expr, delimiter: str, null_replacement: str | None = N
     if null_replacement is not None:
         col = col.list.eval(
             pl.coalesce(
-                pl.element().cast(plf_types.String(), strict=False),
-                lit(null_replacement).cast(plf_types.String(), strict=False),
+                pl.element().cast(polars_datatypes.String(), strict=False),
+                lit(null_replacement).cast(polars_datatypes.String(), strict=False),
             ),
         )
     else:
-        col = col.list.eval(pl.element().cast(plf_types.String(), strict=False))
+        col = col.list.eval(pl.element().cast(polars_datatypes.String(), strict=False))
     return col.list.join(delimiter, ignore_nulls=True)
 
 
@@ -611,11 +627,11 @@ def count(col: str | Expr) -> Expr:
     return col.count()
 
 
-coalesce = plf.coalesce
+coalesce = polars_functions.coalesce
 
 
 def monotonically_increasing_id() -> Expr:
-    return plf.int_range(pl.len(), dtype=pl.UInt64)
+    return polars_functions.int_range(pl.len(), dtype=pl.UInt64)
 
 
 def product(self: str | Expr) -> Expr:
@@ -659,7 +675,7 @@ def dayofyear(col: str | Expr) -> Expr:
 
 
 def current_date() -> Expr:
-    return plf.lit(datetime.datetime.now().date(), dtype=plf_types.Date)  # noqa: DTZ005
+    return polars_functions.lit(datetime.datetime.now().date(), dtype=polars_datatypes.Date)  # noqa: DTZ005
 
 
 now = current_date
@@ -667,7 +683,7 @@ curdate = current_date
 
 
 def current_timestamp() -> Expr:
-    return plf.lit(datetime.datetime.now(), dtype=plf_types.Datetime)  # noqa: DTZ005
+    return polars_functions.lit(datetime.datetime.now(), dtype=polars_datatypes.Datetime)  # noqa: DTZ005
 
 
 localtimestamp = current_timestamp
@@ -698,12 +714,12 @@ def sequence(start: int | Expr, stop: int | Expr, step: int | None = None) -> Ex
     start = _str_to_col(start)
     stop = _str_to_col(stop)
     if step is None:
-        return plf.int_ranges(start, stop + 1)
-    return plf.int_ranges(start, stop + 1, step=step)
+        return polars_functions.int_ranges(start, stop + 1)
+    return polars_functions.int_ranges(start, stop + 1, step=step)
 
 
 def create_map(dict: dict) -> Expr:
-    return plf.struct(**{k: plf.lit(v) for k, v in dict.items()}).struct.json_encode()
+    return polars_functions.struct(**{k: polars_functions.lit(v) for k, v in dict.items()}).struct.json_encode()
 
 
 def getItem(self: Expr, key: str | Expr) -> Expr:
@@ -711,9 +727,9 @@ def getItem(self: Expr, key: str | Expr) -> Expr:
     import json
 
     key = _str_to_col(key)
-    return plf.struct([self.alias("json"), key.alias("key")]).map_elements(
+    return polars_functions.struct([self.alias("json"), key.alias("key")]).map_elements(
         lambda x: json.loads(x["json"]).get(x["key"]),
-        return_dtype=plf_types.String,
+        return_dtype=polars_datatypes.String,
     )
 
 
@@ -725,7 +741,7 @@ def md5(col: str | Expr) -> Expr:
     col = _str_to_col(col)
     return col.map_elements(
         lambda x: hashlib.md5(str(x).encode()).hexdigest() if x is not None else None,  # noqa: S324
-        plf_types.String(),
+        polars_datatypes.String(),
     )
 
 
@@ -735,7 +751,7 @@ def sha1(col: str | Expr) -> Expr:
         lambda x: (
             hashlib.sha1(str(x).encode()).hexdigest() if x is not None else None  # noqa: S324
         ),
-        plf_types.String(),
+        polars_datatypes.String(),
     )
 
 
@@ -743,7 +759,7 @@ def sha256(col: str | Expr) -> Expr:
     col = _str_to_col(col)
     return col.map_elements(
         lambda x: hashlib.sha256(str(x).encode()).hexdigest() if x is not None else None,
-        plf_types.String(),
+        polars_datatypes.String(),
     )
 
 
