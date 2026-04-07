@@ -3,7 +3,8 @@ import os
 from pyspark.sql import SparkSession, Row
 import pyspark.sql.types as T
 import polars as pl
-from datetime import datetime, UTC
+from datetime import datetime, timezone
+UTC = timezone.utc
 from zoneinfo import ZoneInfo
 
 @pytest.fixture(scope="session")
