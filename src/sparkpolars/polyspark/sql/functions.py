@@ -1201,3 +1201,360 @@ def url_decode(col: str | Expr) -> Expr:
 def get_json_object(col: str | Expr, path: str) -> Expr:
     """Extract a value from a JSON string using a JSONPath expression."""
     return _str_to_col(col).str.json_path_match(path)
+
+
+# ── string extras (batch 3) ───────────────────────────────────────────────────
+
+def unbase64(col: str | Expr) -> Expr:
+    """Decode a Base64-encoded string column to UTF-8."""
+    return _str_to_col(col).unbase64()
+
+
+def levenshtein(col1: str | Expr, col2: str | Expr) -> Expr:
+    """Compute Levenshtein edit distance between two string columns."""
+    return _str_to_col(col1).levenshtein(_str_to_col(col2))
+
+
+def regexp_substr(col: str | Expr, pattern: str) -> Expr:
+    """Return first substring matching the regexp."""
+    return _str_to_col(col).regexp_substr(pattern)
+
+
+def elt(*cols: str | Expr) -> Expr:
+    """Return the n-th input (1-based index): elt(index, str1, str2, ...)."""
+    if len(cols) < 2:
+        raise ValueError("elt() requires at least 2 arguments: index + strings")
+    index_expr = _str_to_col(cols[0])
+    str_exprs = [_str_to_col(c) for c in cols[1:]]
+
+    def _batch(series_list: list) -> pl.Series:
+        idx_series = series_list[0]
+        str_series = series_list[1:]
+        results = []
+        for row_i in range(len(idx_series)):
+            idx = idx_series[row_i]
+            if idx is None or idx < 1 or idx > len(str_series):
+                results.append(None)
+            else:
+                results.append(str_series[idx - 1][row_i])
+        return pl.Series(results, dtype=polars_datatypes.String())
+
+    return polars_functions.map_batches([index_expr] + str_exprs, _batch, return_dtype=polars_datatypes.String())
+
+
+# ── math extras (batch 3) ─────────────────────────────────────────────────────
+
+import math as _math  # noqa: E402
+
+
+def log1p(col: str | Expr) -> Expr:
+    """Natural log of (1 + x)."""
+    return _str_to_col(col).log1p()
+
+
+def expm1(col: str | Expr) -> Expr:
+    """e^x - 1."""
+    return _str_to_col(col).expm1()
+
+
+def rint(col: str | Expr) -> Expr:
+    """Round to nearest integer (returns float)."""
+    return _str_to_col(col).rint()
+
+
+def remainder(col1: str | Expr, col2: str | Expr) -> Expr:
+    """IEEE 754 remainder: x - round(x/y)*y."""
+    c1 = _str_to_col(col1)
+    c2 = _str_to_col(col2)
+    s = polars_functions.struct([c1.alias("_x"), c2.alias("_y")])
+    return s.map_elements(
+        lambda r: _math.remainder(r["_x"], r["_y"]) if r["_x"] is not None and r["_y"] is not None else None,
+        polars_datatypes.Float64(),
+    )
+
+
+def gcd(col1: str | Expr, col2: str | Expr) -> Expr:
+    """Greatest common divisor of two integer columns."""
+    import math as _m
+
+    c1 = _str_to_col(col1)
+    c2 = _str_to_col(col2)
+    s = polars_functions.struct([c1.alias("_a"), c2.alias("_b")])
+    return s.map_elements(
+        lambda r: _m.gcd(int(r["_a"]), int(r["_b"])) if r["_a"] is not None and r["_b"] is not None else None,
+        polars_datatypes.Int64(),
+    )
+
+
+def lcm(col1: str | Expr, col2: str | Expr) -> Expr:
+    """Least common multiple of two integer columns."""
+    import math as _m
+
+    c1 = _str_to_col(col1)
+    c2 = _str_to_col(col2)
+    s = polars_functions.struct([c1.alias("_a"), c2.alias("_b")])
+    return s.map_elements(
+        lambda r: _m.lcm(int(r["_a"]), int(r["_b"])) if r["_a"] is not None and r["_b"] is not None else None,
+        polars_datatypes.Int64(),
+    )
+
+
+def bitcount(col: str | Expr) -> Expr:
+    """Count the number of set bits in the integer value."""
+    return _str_to_col(col).bitcount()
+
+
+def toDegrees(col: str | Expr) -> Expr:
+    """Convert radians to degrees."""
+    return _str_to_col(col) * (180.0 / _math.pi)
+
+
+def toRadians(col: str | Expr) -> Expr:
+    """Convert degrees to radians."""
+    return _str_to_col(col) * (_math.pi / 180.0)
+
+
+# ── date extras (batch 3) ─────────────────────────────────────────────────────
+
+def months_between(end: str | Expr, start: str | Expr, roundOff: bool = True) -> Expr:  # noqa: N803
+    """Number of months between two date/timestamp columns."""
+    e = _str_to_col(end)
+    s = _str_to_col(start)
+    struct_expr = polars_functions.struct([e.alias("_e"), s.alias("_s")])
+
+    def _mb(row: Any) -> Any:
+        import datetime as _dt
+
+        ev, sv = row["_e"], row["_s"]
+        if ev is None or sv is None:
+            return None
+        # Convert to date-only for month arithmetic
+        if hasattr(ev, "date"):
+            ed, sd = ev.date(), sv.date()
+        else:
+            ed, sd = ev, sv
+        months = (ed.year - sd.year) * 12 + (ed.month - sd.month)
+        day_diff = (ed.day - sd.day) / 31.0
+        result = months + day_diff
+        if roundOff:
+            import builtins as _builtins
+            return _builtins.round(result, 8)
+        return result
+
+    return struct_expr.map_elements(_mb, polars_datatypes.Float64())
+
+
+def to_utc_timestamp(col: str | Expr, tz: str) -> Expr:
+    """Interpret timestamp as being in *tz* and convert to UTC."""
+    return _str_to_col(col).to_utc_timestamp(tz)
+
+
+def from_utc_timestamp(col: str | Expr, tz: str) -> Expr:
+    """Interpret UTC timestamp and convert to *tz*."""
+    return _str_to_col(col).from_utc_timestamp(tz)
+
+
+# ── array extras (batch 3) ────────────────────────────────────────────────────
+
+def array_reverse(col: str | Expr) -> Expr:
+    """Reverse the elements in an array column."""
+    return _str_to_col(col).array_reverse()
+
+
+def array_insert(col: str | Expr, pos: int, value: Any) -> Expr:
+    """Insert *value* at position *pos* (1-based, supports negative) in each array.
+
+    For negative *pos*, insertion is measured from the end (PySpark semantics).
+    Positive *pos* is 1-based; implemented with pure Polars expressions.
+    Negative *pos* falls back to a UDF (eager DataFrames only).
+    """
+    c = _str_to_col(col)
+    if pos > 0:
+        idx = pos - 1  # 0-based
+        val_lit = polars_functions.lit(pl.Series([value])).implode()
+        part1 = c.list.slice(0, idx)
+        part2 = c.list.slice(idx)
+        return polars_functions.concat_list([part1, val_lit, part2])
+    # negative pos: need runtime list length — wrap with .list.len()
+    # insert at position (list.len + pos + 1) from start (0-based: len + pos)
+    len_expr = c.list.len()
+    idx_expr = len_expr + pos  # 0-based insert index (pos is negative)
+    # Clamp to [0, len]
+    idx_expr = pl.when(idx_expr < 0).then(0).otherwise(idx_expr)
+    val_lit = polars_functions.lit(pl.Series([value])).implode()
+    # Can't do variable-length slice with expression idx in Polars, fall back to UDF
+    s_expr = polars_functions.struct([c.alias("_lst"), idx_expr.cast(polars_datatypes.Int64()).alias("_idx")])
+
+    def _insert_neg(row: Any) -> Any:
+        lst = row["_lst"]
+        if lst is None:
+            return None
+        items = lst.to_list() if hasattr(lst, "to_list") else list(lst)
+        items.insert(int(row["_idx"]), value)
+        return items
+
+    return s_expr.map_elements(_insert_neg, return_dtype=None)
+
+
+# ── aggregate/window extras (batch 3) ─────────────────────────────────────────
+
+def mean(col: str | Expr) -> Expr:
+    """Alias for avg()."""
+    return _str_to_col(col).mean()
+
+
+def ntile(n: int) -> Expr:
+    """Divide the ordered partition into *n* buckets (1-based)."""
+    length = polars_functions.len()
+    rank = polars_functions.int_range(start=0, end=length, dtype=polars_datatypes.Int64())
+    return (rank * n // length + 1).cast(polars_datatypes.Int32())
+
+
+def cume_dist() -> Expr:
+    """Cumulative distribution: (rank) / total rows."""
+    length = polars_functions.len()
+    rank = polars_functions.int_range(start=1, end=length + 1, dtype=polars_datatypes.Int64())
+    return rank.cast(polars_datatypes.Float64()) / length.cast(polars_datatypes.Float64())
+
+
+def percent_rank() -> Expr:
+    """Percent rank: (rank - 1) / (total - 1), 0.0 when only one row."""
+    length = polars_functions.len()
+    rank = polars_functions.int_range(start=0, end=length, dtype=polars_datatypes.Int64())
+    return pl.when(length <= 1).then(pl.lit(0.0)).otherwise(
+        rank.cast(polars_datatypes.Float64()) / (length - 1).cast(polars_datatypes.Float64())
+    )
+
+
+# ── struct / map extras (batch 3) ─────────────────────────────────────────────
+
+def to_json(col: str | Expr) -> Expr:
+    """Serialize a struct column to a JSON string."""
+    return _str_to_col(col).to_json()
+
+
+def map_keys(col: str | Expr) -> Expr:
+    """Return keys of a map column (list-of-structs with 'key' field)."""
+    return _str_to_col(col).map_keys()
+
+
+def map_values(col: str | Expr) -> Expr:
+    """Return values of a map column (list-of-structs with 'value' field)."""
+    return _str_to_col(col).map_values()
+
+
+# ── fix first/last to support ignorenulls ─────────────────────────────────────
+
+def first(col: str | Expr, ignorenulls: bool = False) -> Expr:
+    """First value in the group; skip nulls when ignorenulls=True."""
+    e = _str_to_col(col)
+    if ignorenulls:
+        return e.drop_nulls().first()
+    return e.first()
+
+
+def last(col: str | Expr, ignorenulls: bool = False) -> Expr:
+    """Last value in the group; skip nulls when ignorenulls=True."""
+    e = _str_to_col(col)
+    if ignorenulls:
+        return e.drop_nulls().last()
+    return e.last()
+
+
+# ── fix unix_timestamp to support format string ───────────────────────────────
+
+def unix_timestamp(col: str | Expr | None = None, fmt: str | None = None) -> Expr:
+    """Seconds since epoch.  With no args returns current time."""
+    if col is None:
+        import time as _time
+
+        return pl.lit(int(_time.time())).cast(polars_datatypes.Int64())
+    e = _str_to_col(col)
+    if fmt is not None:
+        return e.str.strptime(polars_datatypes.Datetime("us"), fmt).dt.epoch(time_unit="s")
+    return e.dt.epoch(time_unit="s")
+
+
+# ── monotonic_id alias ────────────────────────────────────────────────────────
+
+def monotonic_id() -> Expr:
+    """Monotonically increasing 64-bit integer (row index)."""
+    return polars_functions.int_range(
+        start=0,
+        end=polars_functions.len(),
+        dtype=polars_datatypes.UInt64(),
+    )
+
+
+# ── NotImplementedError stubs ─────────────────────────────────────────────────
+
+def soundex(col: str | Expr) -> Expr:  # noqa: ARG001
+    raise NotImplementedError("soundex is not supported in Polars")
+
+
+def metaphone(col: str | Expr) -> Expr:  # noqa: ARG001
+    raise NotImplementedError("metaphone is not supported in Polars")
+
+
+def json_tuple(col: str | Expr, *fields: str) -> Expr:  # noqa: ARG001
+    raise NotImplementedError("json_tuple is not supported in Polars")
+
+
+def from_json(col: str | Expr, schema: Any) -> Expr:  # noqa: ARG001
+    raise NotImplementedError("from_json is not supported in Polars")
+
+
+def map_from_entries(col: str | Expr) -> Expr:  # noqa: ARG001
+    raise NotImplementedError("map_from_entries is not supported in Polars")
+
+
+def map_concat(*cols: str | Expr) -> Expr:  # noqa: ARG001
+    raise NotImplementedError("map_concat is not supported in Polars")
+
+
+def map_filter(col: str | Expr, f: Callable) -> Expr:  # noqa: ARG001
+    raise NotImplementedError("map_filter is not supported in Polars")
+
+
+def transform_keys(col: str | Expr, f: Callable) -> Expr:  # noqa: ARG001
+    raise NotImplementedError("transform_keys is not supported in Polars")
+
+
+def transform_values(col: str | Expr, f: Callable) -> Expr:  # noqa: ARG001
+    raise NotImplementedError("transform_values is not supported in Polars")
+
+
+def grouping(col: str | Expr) -> Expr:  # noqa: ARG001
+    raise NotImplementedError("grouping is not supported outside GROUPING SETS context")
+
+
+def grouping_id(*cols: str | Expr) -> Expr:  # noqa: ARG001
+    raise NotImplementedError("grouping_id is not supported outside GROUPING SETS context")
+
+
+def input_file_name() -> Expr:
+    raise NotImplementedError("input_file_name is not applicable to Polars DataFrames")
+
+
+def assert_true(col: str | Expr, error_msg: str = "") -> Expr:  # noqa: ARG001
+    raise NotImplementedError("assert_true is not supported in Polars")
+
+
+def schema_of_csv(col: str | Expr) -> Expr:  # noqa: ARG001
+    raise NotImplementedError("schema_of_csv is not supported in Polars")
+
+
+def schema_of_json(col: str | Expr) -> Expr:  # noqa: ARG001
+    raise NotImplementedError("schema_of_json is not supported in Polars")
+
+
+def window(time_col: str | Expr, window_duration: str, slide_duration: str | None = None, start_time: str | None = None) -> Expr:  # noqa: ARG001
+    raise NotImplementedError("window (time-based tumbling/sliding) is not supported in Polars")
+
+
+def posexplode(col: str | Expr) -> Expr:  # noqa: ARG001
+    raise NotImplementedError("posexplode is not supported; use explode() with a row index instead")
+
+
+def posexplode_outer(col: str | Expr) -> Expr:  # noqa: ARG001
+    raise NotImplementedError("posexplode_outer is not supported; use explode() with a row index instead")

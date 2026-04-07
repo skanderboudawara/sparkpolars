@@ -1218,3 +1218,130 @@ def approx_count_distinct(self: Expr, rsd: float = 0.05) -> Expr:  # noqa: ARG00
 Expr.percentile = percentile
 Expr.sum_distinct = sum_distinct
 Expr.approx_count_distinct = approx_count_distinct
+
+
+# ── string extras (batch 3) ───────────────────────────────────────────────────
+
+def unbase64(self: Expr) -> Expr:
+    """Decode a Base64-encoded string column to a UTF-8 string."""
+    import base64 as _b64
+
+    return self.map_elements(
+        lambda x: _b64.b64decode(x).decode("utf-8") if x is not None else None,
+        _polars_datatypes.String(),
+    )
+
+
+def regexp_substr(self: Expr, pattern: str) -> Expr:
+    """Return the first substring matching the regexp, or null if no match."""
+    return self.str.extract(pattern, 0)
+
+
+def levenshtein(self: Expr, other: Any) -> Expr:
+    """Compute the Levenshtein edit distance between two string columns."""
+    other_expr = other if isinstance(other, Expr) else pl.lit(other)
+    s = polars_functions.struct([self.alias("_l"), other_expr.alias("_r")])
+
+    def _lev(row: Any) -> Any:
+        s1, s2 = row["_l"], row["_r"]
+        if s1 is None or s2 is None:
+            return None
+        m, n = len(s1), len(s2)
+        row_arr = list(range(n + 1))
+        for i in range(1, m + 1):
+            prev = i
+            for j in range(1, n + 1):
+                curr = row_arr[j - 1] if s1[i - 1] == s2[j - 1] else 1 + min(row_arr[j - 1], row_arr[j], prev)
+                row_arr[j - 1] = prev
+                prev = curr
+            row_arr[n] = prev
+        return row_arr[n]
+
+    return s.map_elements(_lev, _polars_datatypes.Int32())
+
+
+Expr.unbase64 = unbase64
+Expr.regexp_substr = regexp_substr
+Expr.levenshtein = levenshtein
+
+
+# ── math extras (batch 3) ─────────────────────────────────────────────────────
+
+import math as _math  # noqa: E402
+
+
+def log1p(self: Expr) -> Expr:
+    """Natural log of (1 + x)."""
+    return (self + 1.0).log(_math.e)
+
+
+def expm1(self: Expr) -> Expr:
+    """e^x - 1."""
+    return self.exp() - 1.0
+
+
+def rint(self: Expr) -> Expr:
+    """Round to nearest integer (returns float)."""
+    return self.round(0)
+
+
+def bitcount(self: Expr) -> Expr:
+    """Count the number of set bits (1s) in the binary representation."""
+    return self.map_elements(
+        lambda x: bin(int(x)).count("1") if x is not None else None,
+        _polars_datatypes.Int32(),
+    )
+
+
+Expr.log1p = log1p
+Expr.expm1 = expm1
+Expr.rint = rint
+Expr.bitcount = bitcount
+
+
+# ── timestamp extras (batch 3) ────────────────────────────────────────────────
+
+def to_utc_timestamp(self: Expr, tz: str) -> Expr:
+    """Interpret timestamp as being in *tz* and convert to UTC."""
+    return self.dt.replace_time_zone(tz).dt.convert_time_zone("UTC")
+
+
+def from_utc_timestamp(self: Expr, tz: str) -> Expr:
+    """Interpret timestamp as UTC and convert to *tz*."""
+    return self.dt.replace_time_zone("UTC").dt.convert_time_zone(tz)
+
+
+Expr.to_utc_timestamp = to_utc_timestamp
+Expr.from_utc_timestamp = from_utc_timestamp
+
+
+# ── array extras (batch 3) ────────────────────────────────────────────────────
+
+def array_reverse(self: Expr) -> Expr:
+    """Reverse the elements of an array column."""
+    return self.list.reverse()
+
+
+Expr.array_reverse = array_reverse
+
+
+# ── struct / map extras (batch 3) ─────────────────────────────────────────────
+
+def to_json(self: Expr) -> Expr:
+    """Serialize a struct column to a JSON string."""
+    return self.struct.json_encode()
+
+
+def map_keys(self: Expr) -> Expr:
+    """Return the keys of a map column (stored as list-of-structs with 'key' field)."""
+    return self.list.eval(pl.element().struct.field("key"))
+
+
+def map_values(self: Expr) -> Expr:
+    """Return the values of a map column (stored as list-of-structs with 'value' field)."""
+    return self.list.eval(pl.element().struct.field("value"))
+
+
+Expr.to_json = to_json
+Expr.map_keys = map_keys
+Expr.map_values = map_values

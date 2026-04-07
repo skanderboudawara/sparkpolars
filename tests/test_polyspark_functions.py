@@ -1214,3 +1214,232 @@ def test_sf_get_json_object():
     df = pl.DataFrame({"s": ['{"name": "alice", "age": 30}']})
     result = df.select(sf.get_json_object(pl.col("s"), "$.name"))["s"][0]
     assert result == "alice"
+
+
+# ── string extras (batch 3) ───────────────────────────────────────────────────
+
+def test_sf_unbase64():
+    import base64
+    encoded = base64.b64encode(b"hello").decode()
+    df = pl.DataFrame({"s": [encoded]})
+    assert df.select(sf.unbase64(pl.col("s")))["s"][0] == "hello"
+
+
+def test_sf_levenshtein():
+    df = pl.DataFrame({"a": ["kitten"], "b": ["sitting"]})
+    result = df.select(sf.levenshtein(pl.col("a"), pl.col("b")).alias("r"))["r"][0]
+    assert result == 3
+
+
+def test_sf_regexp_substr():
+    df = pl.DataFrame({"s": ["hello world 123"]})
+    result = df.select(sf.regexp_substr(pl.col("s"), r"\d+"))["s"][0]
+    assert result == "123"
+
+
+def test_sf_elt():
+    df = pl.DataFrame({"idx": [1, 2, 3], "a": ["x", "x", "x"], "b": ["y", "y", "y"]})
+    result = df.select(sf.elt(pl.col("idx"), pl.col("a"), pl.col("b")).alias("r"))["r"].to_list()
+    assert result == ["x", "y", None]
+
+
+# ── math extras (batch 3) ─────────────────────────────────────────────────────
+
+def test_sf_log1p():
+    import math
+    df = pl.DataFrame({"x": [0.0, 1.0]})
+    result = df.select(sf.log1p(pl.col("x")))["x"].to_list()
+    assert abs(result[0] - 0.0) < 1e-9
+    assert abs(result[1] - math.log(2)) < 1e-9
+
+
+def test_sf_expm1():
+    import math
+    df = pl.DataFrame({"x": [0.0, 1.0]})
+    result = df.select(sf.expm1(pl.col("x")))["x"].to_list()
+    assert abs(result[0] - 0.0) < 1e-9
+    assert abs(result[1] - (math.e - 1)) < 1e-9
+
+
+def test_sf_rint():
+    df = pl.DataFrame({"x": [1.4, 1.6, -1.5]})
+    result = df.select(sf.rint(pl.col("x")))["x"].to_list()
+    assert result == [1.0, 2.0, -2.0]
+
+
+def test_sf_remainder():
+    import math
+    df = pl.DataFrame({"x": [5.0], "y": [3.0]})
+    result = df.select(sf.remainder(pl.col("x"), pl.col("y")).alias("r"))["r"][0]
+    assert abs(result - math.remainder(5.0, 3.0)) < 1e-9
+
+
+def test_sf_gcd():
+    df = pl.DataFrame({"a": [12], "b": [8]})
+    result = df.select(sf.gcd(pl.col("a"), pl.col("b")).alias("r"))["r"][0]
+    assert result == 4
+
+
+def test_sf_lcm():
+    df = pl.DataFrame({"a": [4], "b": [6]})
+    result = df.select(sf.lcm(pl.col("a"), pl.col("b")).alias("r"))["r"][0]
+    assert result == 12
+
+
+def test_sf_bitcount():
+    df = pl.DataFrame({"x": [7]})  # 0b111 → 3 set bits
+    result = df.select(sf.bitcount(pl.col("x")))["x"][0]
+    assert result == 3
+
+
+def test_sf_toDegrees():
+    import math
+    df = pl.DataFrame({"x": [math.pi]})
+    result = df.select(sf.toDegrees(pl.col("x")))["x"][0]
+    assert abs(result - 180.0) < 1e-9
+
+
+def test_sf_toRadians():
+    import math
+    df = pl.DataFrame({"x": [180.0]})
+    result = df.select(sf.toRadians(pl.col("x")))["x"][0]
+    assert abs(result - math.pi) < 1e-9
+
+
+# ── date extras (batch 3) ─────────────────────────────────────────────────────
+
+def test_sf_months_between():
+    from datetime import date
+    df = pl.DataFrame({
+        "end": [date(2021, 3, 15)],
+        "start": [date(2021, 1, 15)],
+    })
+    result = df.select(sf.months_between(pl.col("end"), pl.col("start")).alias("r"))["r"][0]
+    assert abs(result - 2.0) < 1e-6
+
+
+# ── array extras (batch 3) ────────────────────────────────────────────────────
+
+def test_sf_array_reverse():
+    df = pl.DataFrame({"a": [[1, 2, 3]]})
+    result = df.select(sf.array_reverse(pl.col("a")))["a"][0].to_list()
+    assert result == [3, 2, 1]
+
+
+def test_sf_array_insert():
+    df = pl.DataFrame({"a": [[1, 2, 3]]})
+    result = df.select(sf.array_insert(pl.col("a"), 2, 99).alias("r"))["r"][0]
+    if hasattr(result, "to_list"):
+        result = result.to_list()
+    assert result == [1, 99, 2, 3]
+
+
+# ── aggregate/window extras (batch 3) ─────────────────────────────────────────
+
+def test_sf_mean():
+    df = pl.DataFrame({"x": [1.0, 2.0, 3.0]})
+    result = df.select(sf.mean(pl.col("x")))["x"][0]
+    assert result == 2.0
+
+
+def test_sf_ntile():
+    df = pl.DataFrame({"x": [1, 2, 3, 4]})
+    result = df.select(sf.ntile(2).alias("t"))["t"].to_list()
+    assert result == [1, 1, 2, 2]
+
+
+def test_sf_cume_dist():
+    df = pl.DataFrame({"x": [1, 2, 3, 4]})
+    result = df.select(sf.cume_dist().alias("c"))["c"].to_list()
+    assert result == [0.25, 0.5, 0.75, 1.0]
+
+
+def test_sf_percent_rank():
+    df = pl.DataFrame({"x": [1, 2, 3, 4]})
+    result = df.select(sf.percent_rank().alias("p"))["p"].to_list()
+    expected = [0.0, 1 / 3, 2 / 3, 1.0]
+    for a, b in zip(result, expected):
+        assert abs(a - b) < 1e-9
+
+
+# ── struct / map extras (batch 3) ─────────────────────────────────────────────
+
+def test_sf_to_json():
+    df = pl.DataFrame({"s": [{"a": 1, "b": 2}]}, schema={"s": pl.Struct({"a": pl.Int32, "b": pl.Int32})})
+    result = df.select(sf.to_json(pl.col("s")))["s"][0]
+    import json
+    parsed = json.loads(result)
+    assert parsed == {"a": 1, "b": 2}
+
+
+def test_sf_map_keys():
+    df = pl.DataFrame({"m": [[{"key": "a", "value": "1"}, {"key": "b", "value": "2"}]]})
+    result = df.select(sf.map_keys(pl.col("m")))["m"][0].to_list()
+    assert sorted(result) == ["a", "b"]
+
+
+def test_sf_map_values():
+    df = pl.DataFrame({"m": [[{"key": "a", "value": "1"}, {"key": "b", "value": "2"}]]})
+    result = df.select(sf.map_values(pl.col("m")))["m"][0].to_list()
+    assert sorted(result) == ["1", "2"]
+
+
+# ── first / last with ignorenulls ─────────────────────────────────────────────
+
+def test_sf_first_ignorenulls():
+    df = pl.DataFrame({"x": [None, None, 3, 4]}, schema={"x": pl.Int32})
+    result = df.select(sf.first(pl.col("x"), ignorenulls=True))["x"][0]
+    assert result == 3
+
+
+def test_sf_last_ignorenulls():
+    df = pl.DataFrame({"x": [1, 2, None, None]}, schema={"x": pl.Int32})
+    result = df.select(sf.last(pl.col("x"), ignorenulls=True))["x"][0]
+    assert result == 2
+
+
+# ── unix_timestamp with format ─────────────────────────────────────────────────
+
+def test_sf_unix_timestamp_with_fmt():
+    df = pl.DataFrame({"ts": ["2020-01-01 00:00:00"]})
+    result = df.select(sf.unix_timestamp(pl.col("ts"), fmt="%Y-%m-%d %H:%M:%S").alias("t"))["t"][0]
+    assert result == 1577836800
+
+
+def test_sf_unix_timestamp_no_args():
+    import time
+    result = pl.select(sf.unix_timestamp().alias("t"))["t"][0]
+    assert abs(result - int(time.time())) <= 2
+
+
+# ── monotonic_id ──────────────────────────────────────────────────────────────
+
+def test_sf_monotonic_id():
+    df = pl.DataFrame({"x": [10, 20, 30]})
+    result = df.select(sf.monotonic_id().alias("id"))["id"].to_list()
+    assert result == [0, 1, 2]
+
+
+# ── NotImplementedError stubs ─────────────────────────────────────────────────
+
+import pytest as _pytest
+
+
+def test_sf_soundex_raises():
+    with _pytest.raises(NotImplementedError):
+        sf.soundex(pl.col("x"))
+
+
+def test_sf_from_json_raises():
+    with _pytest.raises(NotImplementedError):
+        sf.from_json(pl.col("x"), None)
+
+
+def test_sf_posexplode_raises():
+    with _pytest.raises(NotImplementedError):
+        sf.posexplode(pl.col("x"))
+
+
+def test_sf_window_raises():
+    with _pytest.raises(NotImplementedError):
+        sf.window(pl.col("ts"), "1 day")
