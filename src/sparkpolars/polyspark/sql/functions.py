@@ -10,184 +10,25 @@ import polars as pl
 import polars.datatypes as polars_datatypes
 import polars.functions as polars_functions
 from polars import lit
-from polars._utils.parse import parse_into_list_of_expressions
-from polars.datatypes import DataType
 from polars.expr import Expr
 
-Expr._original_cast = Expr.cast
-
-
-def cast_strict(self: Expr, dtype: DataType, strict: bool = False) -> Expr:
-    # Filter out columns that don't exist
-    return self._original_cast(dtype, strict=strict)
-
-
-Expr.cast = cast_strict
+# Apply all Expr (Column) monkey-patches first so every function in this
+# module can rely on them being in place.
+from . import columns as _columns  # noqa: F401 — side-effects only
+from .columns import SparkWhen, _str_to_col
 
 
 def broadcast(df: Any) -> Any:
     return df
 
 
-# Add Spark-compatible methods to Polars Expr
-def isNull(self: Expr) -> Expr:
-    return self.is_null()
-
-
-def isNotNull(self: Expr) -> Expr:
-    return self.is_not_null()
-
-
-def isin(self: Expr, *cols: Any) -> Expr:
-    if len(cols) == 1:
-        return self.is_in(cols[0])
-    return self.is_in(cols)
-
-
-def over(
-    self: Expr,
-    partition_by: Any = None,
-    *more_exprs: Any,
-    order_by: Any = None,
-    sort_by: Any = None,
-) -> Expr:
-    # Handle Window object
-    if hasattr(partition_by, "_partition_by"):
-        # Extract values from Window object
-        window_partition_by = partition_by._partition_by
-        window_order_by = partition_by._order_by
-        window_sort_by = partition_by._sort_by
-
-        # Use Window object values, overriding with any explicit parameters
-        if partition_by._partition_by is not None:
-            partition_by = window_partition_by
-        if order_by is None and window_order_by is not None:
-            order_by = window_order_by
-        if sort_by is None and window_sort_by is not None:
-            sort_by = window_sort_by
-
-    if partition_by is None:
-        if order_by is not None and sort_by is not None:
-            return self.sort_by(order_by, descending=sort_by)
-        return self
-
-    partition_by = parse_into_list_of_expressions(partition_by, *more_exprs)
-
-    result = self._from_pyexpr(
-        self._pyexpr.over(
-            partition_by,
-            order_by=None,
-            order_by_descending=False,
-            order_by_nulls_last=False,  # does not work yet
-            mapping_strategy="group_to_rows",
-        ),
-    )
-
-    # Only apply sort_by if both order_by and sort_by are not None
-    if order_by is not None and sort_by is not None:
-        result = result.sort_by(order_by, descending=sort_by)
-
-    return result
-
-
-# Monkey-patch the Expr class to add Spark methods
-Expr.isNull = isNull
-Expr.isNotNull = isNotNull
-Expr.isin = isin
-Expr.over = over
-
 col = polars_functions.col
 column = col
 Column = col
 
 
-def _str_to_col(name: str | Expr) -> Expr:
-    if isinstance(name, str):
-        return col(name)
-    return name
-
-
-def eqNullSafe(self: Expr, other: str | Expr) -> Expr:
-    other = _str_to_col(other)
-    return self.eq_missing(other)
-
-
-Expr.eqNullSafe = eqNullSafe
-
-
-def rlike(str: str | Expr, regexp: str) -> Expr:
-    return _str_to_col(str).str.contains(regexp, literal=False)
-
-
-Expr.rlike = rlike
-regexp_like = rlike
-regexp = rlike
-
-
-def between(self: Expr, lowerBound: Any, upperBound: Any) -> Expr:
-    return self.ge(lowerBound) & self.le(upperBound)
-
-
-Expr.between = between
-
-
-def outer(self: Expr) -> Expr:
-    """No-op marker for PySpark correlated-subquery syntax.
-
-    PySpark uses ``col("x").outer()`` to reference an outer-query column from
-    inside a correlated subquery.  Polars has no correlated-subquery concept at
-    the DataFrame API level — correlated EXISTS/NOT-EXISTS must be rewritten as
-    semi/anti joins.  This no-op allows code that calls ``.outer()`` to import
-    and run without immediately raising an AttributeError, while the actual
-    correlation logic must be expressed as a join.
-    """
-    return self
-
-
-Expr.outer = outer
-
-
-def startswith(str: str | Expr, prefix: str) -> Expr:
-    return _str_to_col(str).str.starts_with(prefix)
-
-
-Expr.startswith = startswith
-
-
-def endswith(str: str | Expr, suffix: str) -> Expr:
-    return _str_to_col(str).str.ends_with(suffix)
-
-
-Expr.endswith = endswith
-
-
-def substring(str: str | Expr, pos: int, len: int | None = None) -> Expr:
-    if len is not None:
-        return _str_to_col(str).str.slice(pos - 1, len)
-    return _str_to_col(str).str.slice(pos - 1)
-
-
-substr = substring
-Expr.substr = substr
-
-
 def trim(col: str | Expr, trim: str) -> Expr:
     return _str_to_col(col).str.strip_chars(trim)
-
-
-class SparkWhen:
-    def __init__(self, condition: Expr, value: Any) -> None:
-        self._when_expr = polars_functions.when(condition).then(value)
-
-    def when(self, condition: Expr, value: Any) -> "SparkWhen":
-        self._when_expr = self._when_expr.when(condition).then(value)
-        return self
-
-    def otherwise(self, value: Any) -> Expr:
-        return self._when_expr.otherwise(value)
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._when_expr, name)
 
 
 def when(condition: Expr, value: Any) -> SparkWhen:
@@ -286,9 +127,6 @@ def btrim(str: str | Expr, trim: str | None = None) -> Expr:
 
 def contains(left: str | Expr, right: str | Expr) -> Expr:
     return _str_to_col(left).str.contains(right)
-
-
-Expr.contains = contains
 
 
 def encode(col: str | Expr, charset: str) -> Expr:
@@ -436,51 +274,16 @@ def least(*cols: str | Expr) -> Expr:
     return polars_functions.min_horizontal(*cols)
 
 
-def _get_desc_status(self: Expr) -> bool:
-    return getattr(self, "_desc_status_value", False)
-
-
-def _set_desc_status(self: Expr, status: bool) -> None:
-    self._desc_status_value = status
-
-
-Expr._desc_status = property(_get_desc_status, _set_desc_status)
-
-
-def asc(col: str | Expr) -> Expr:
-    col = _str_to_col(col)
-    col._desc_status = False
-    return col.sort(descending=False, nulls_last=False)
-
-
-def asc_nulls_first(col: str | Expr) -> Expr:
-    col = _str_to_col(col)
-    col._desc_status = False
-    return col.sort(descending=False, nulls_last=False)
-
-
-def asc_nulls_last(col: str | Expr) -> Expr:
-    col = _str_to_col(col)
-    col._desc_status = False
-    return col.sort(descending=False, nulls_last=True)
-
-
-def desc(col: str | Expr) -> Expr:
-    col = _str_to_col(col)
-    col._desc_status = True
-    return col.sort(descending=True, nulls_last=False)
-
-
-def desc_nulls_first(col: str | Expr) -> Expr:
-    col = _str_to_col(col)
-    col._desc_status = True
-    return col.sort(descending=True, nulls_last=False)
-
-
-def desc_nulls_last(col: str | Expr) -> Expr:
-    col = _str_to_col(col)
-    col._desc_status = True
-    return col.sort(descending=True, nulls_last=True)
+# Sort-direction standalone helpers — used by orderBy/_desc_status logic in dataframe.py.
+# The Expr method variants (col("a").asc() etc.) are patched in columns.py.
+from .columns import (  # noqa: E402
+    asc,
+    asc_nulls_first,
+    asc_nulls_last,
+    desc,
+    desc_nulls_first,
+    desc_nulls_last,
+)
 
 
 def array(*cols: str | Expr) -> Expr:
@@ -720,21 +523,6 @@ def sequence(start: int | Expr, stop: int | Expr, step: int | None = None) -> Ex
 
 def create_map(dict: dict) -> Expr:
     return polars_functions.struct(**{k: polars_functions.lit(v) for k, v in dict.items()}).struct.json_encode()
-
-
-def getItem(self: Expr, key: str | Expr) -> Expr:
-    """Extract value from a JSON-encoded map using a key."""
-    import json
-
-    key = _str_to_col(key)
-    return polars_functions.struct([self.alias("json"), key.alias("key")]).map_elements(
-        lambda x: json.loads(x["json"]).get(x["key"]),
-        return_dtype=polars_datatypes.String,
-    )
-
-
-# Add getItem method to Expr class
-Expr.getItem = getItem
 
 
 def md5(col: str | Expr) -> Expr:
