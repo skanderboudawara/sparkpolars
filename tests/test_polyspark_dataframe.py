@@ -676,6 +676,73 @@ def test_groupBy_agg_df(simple_df):
     assert "b" in result.columns
 
 
+# ── groupBy with spark functions ──────────────────────────────────────────────
+
+import src.sparkpolars.polyspark.sql.functions as _sf  # noqa: E402
+
+
+def test_groupBy_sum():
+    import polars as pl
+    df = pl.DataFrame({"dept": ["A", "A", "B", "B"], "sal": [100, 200, 300, 400]})
+    result = df.groupBy("dept").agg(_sf.sum("sal")).sort("dept")
+    assert result.columns == ["dept", "sum(sal)"]
+    assert result["sum(sal)"].to_list() == [300, 700]
+
+
+def test_groupBy_multi_agg():
+    import polars as pl
+    df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+    result = df.groupBy("dept").agg(_sf.sum("sal"), _sf.avg("sal"), _sf.count("sal")).sort("dept")
+    assert "sum(sal)" in result.columns
+    assert "avg(sal)" in result.columns
+    assert "count(sal)" in result.columns
+
+
+def test_groupBy_dict_agg():
+    import polars as pl
+    df = pl.DataFrame({"dept": ["A", "A", "B", "B"], "sal": [100, 200, 300, 400]})
+    result = df.groupBy("dept").agg({"sal": "sum"}).sort("dept")
+    assert "sum(sal)" in result.columns
+    assert result["sum(sal)"].to_list() == [300, 700]
+
+
+def test_groupBy_dict_multi_fn():
+    import polars as pl
+    df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+    result = df.groupBy("dept").agg({"sal": ["sum", "avg"]}).sort("dept")
+    assert "sum(sal)" in result.columns
+    assert "avg(sal)" in result.columns
+
+
+def test_groupBy_count_method():
+    import polars as pl
+    df = pl.DataFrame({"dept": ["A", "A", "B", "B"], "sal": [100, 200, 300, 400]})
+    result = df.groupBy("dept").count().sort("dept")
+    assert "count" in result.columns
+    assert result["count"].to_list() == [2, 2]
+
+
+def test_groupBy_no_cols_global_agg():
+    import polars as pl
+    df = pl.DataFrame({"sal": [100, 200, 300]})
+    result = df.groupBy().agg(_sf.sum("sal"))
+    assert result["sum(sal)"][0] == 600
+
+
+def test_global_agg_on_df():
+    import polars as pl
+    df = pl.DataFrame({"sal": [100, 200, 300]})
+    result = df.agg(_sf.sum("sal"))
+    assert result["sum(sal)"][0] == 600
+
+
+def test_global_agg_dict():
+    import polars as pl
+    df = pl.DataFrame({"sal": [100, 200, 300]})
+    result = df.agg({"sal": "sum"})
+    assert result["sum(sal)"][0] == 600
+
+
 def test_crossJoin_df(simple_df):
     small = simple_df.head(2)
     result = small.crossJoin(small)

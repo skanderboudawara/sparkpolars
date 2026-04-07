@@ -377,29 +377,139 @@ def crossJoin(
     return self.join(other, how="cross")
 
 
+# ── SparkGroupBy wrapper ──────────────────────────────────────────────────────
+
+_DICT_AGG_MAP = {
+    "sum": lambda c: c.sum().alias(f"sum({c.meta.output_name()})"),
+    "min": lambda c: c.min().alias(f"min({c.meta.output_name()})"),
+    "max": lambda c: c.max().alias(f"max({c.meta.output_name()})"),
+    "avg": lambda c: c.mean().alias(f"avg({c.meta.output_name()})"),
+    "mean": lambda c: c.mean().alias(f"avg({c.meta.output_name()})"),
+    "count": lambda c: c.count().alias(f"count({c.meta.output_name()})"),
+    "first": lambda c: c.first().alias(f"first({c.meta.output_name()})"),
+    "last": lambda c: c.last().alias(f"last({c.meta.output_name()})"),
+    "stddev": lambda c: c.std().alias(f"stddev({c.meta.output_name()})"),
+    "variance": lambda c: c.var().alias(f"variance({c.meta.output_name()})"),
+    "median": lambda c: c.median().alias(f"median({c.meta.output_name()})"),
+}
+
+
+def _resolve_agg_exprs(*exprs: Any) -> list[Expr]:
+    """Flatten and normalise aggregation expressions.
+
+    Accepts:
+    - Polars Expr objects (pass through)
+    - Dicts  {"col": "fn"} or {"col": ["fn1", "fn2"]}
+    """
+    result: list[Expr] = []
+    for e in exprs:
+        if isinstance(e, dict):
+            for col_name, fn_spec in e.items():
+                if not isinstance(col_name, str):
+                    msg = "All keys and values in the aggregation dictionary must be strings."
+                    raise ValueError(msg)
+                fns = [fn_spec] if isinstance(fn_spec, str) else list(fn_spec)
+                for fn_name in fns:
+                    builder = _DICT_AGG_MAP.get(fn_name)
+                    if builder is None:
+                        msg = f"Aggregation functions must be one of {list(_DICT_AGG_MAP)}. Got: '{fn_name}'"
+                        raise ValueError(msg)
+                    result.append(builder(col(col_name)))
+        elif isinstance(e, Expr):
+            result.append(e)
+        else:
+            msg = f"Expected Expr or dict, got {type(e).__name__}"
+            raise TypeError(msg)
+    return result
+
+
+class SparkGroupBy:
+    """PySpark-compatible GroupBy wrapper around Polars GroupBy / LazyGroupBy.
+
+    Supports:
+    - ``agg(sf.sum("sal"), sf.avg("sal"))``        — Expr API
+    - ``agg({"sal": "sum", "bonus": "max"})``       — dict API
+    - ``agg({"sal": ["sum", "avg"]})``              — multi-fn dict
+    - ``count()``  ``min("col")``  ``max("col")`` etc. as convenience methods
+    """
+
+    def __init__(
+        self,
+        df: PolarsDataFrame | PolarsLazyDataFrame,
+        *partition_cols: Any,
+    ) -> None:
+        self._df = df
+        self._cols = partition_cols
+
+    def _group_by(self) -> Any:
+        if self._cols:
+            return self._df.group_by(*self._cols)
+        # No partition columns → global aggregate (group by constant)
+        return None
+
+    def agg(self, *exprs: Any) -> PolarsDataFrame | PolarsLazyDataFrame:
+        flat = _resolve_agg_exprs(*exprs)
+        gb = self._group_by()
+        if gb is None:
+            # global aggregate
+            return (
+                self._df.group_by(lit(1).alias("_spark_agg_key"))
+                .agg(*flat)
+                .drop("_spark_agg_key")
+            )
+        return gb.agg(*flat)
+
+    # ── convenience aggregation methods ──────────────────────────────────────
+
+    def count(self) -> PolarsDataFrame | PolarsLazyDataFrame:
+        agg_expr = pl.len().alias("count")
+        gb = self._group_by()
+        if gb is None:
+            return (
+                self._df.group_by(lit(1).alias("_spark_agg_key"))
+                .agg(agg_expr)
+                .drop("_spark_agg_key")
+            )
+        return gb.agg(agg_expr)
+
+    def sum(self, *cols: str) -> PolarsDataFrame | PolarsLazyDataFrame:
+        exprs = [col(c).sum().alias(f"sum({c})") for c in cols] if cols else [pl.all().sum()]
+        return self.agg(*exprs)
+
+    def avg(self, *cols: str) -> PolarsDataFrame | PolarsLazyDataFrame:
+        exprs = [col(c).mean().alias(f"avg({c})") for c in cols] if cols else [pl.all().mean()]
+        return self.agg(*exprs)
+
+    mean = avg
+
+    def min(self, *cols: str) -> PolarsDataFrame | PolarsLazyDataFrame:
+        exprs = [col(c).min().alias(f"min({c})") for c in cols] if cols else [pl.all().min()]
+        return self.agg(*exprs)
+
+    def max(self, *cols: str) -> PolarsDataFrame | PolarsLazyDataFrame:
+        exprs = [col(c).max().alias(f"max({c})") for c in cols] if cols else [pl.all().max()]
+        return self.agg(*exprs)
+
+    def __getattr__(self, name: str) -> Any:
+        """Delegate anything else (e.g. .map_groups) to the underlying GroupBy."""
+        return getattr(self._group_by(), name)
+
+
 # ── groupBy / agg ─────────────────────────────────────────────────────────────
-def groupBy(self: PolarsDataFrame | PolarsLazyDataFrame, *cols: Any) -> Any:
-    return self.group_by(*cols)
+def groupBy(self: PolarsDataFrame | PolarsLazyDataFrame, *cols: Any) -> SparkGroupBy:
+    return SparkGroupBy(self, *cols)
 
 
 def agg(
     self: PolarsDataFrame | PolarsLazyDataFrame,
-    *expr: Any,
+    *exprs: Any,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
-    if len(expr) == 1 and isinstance(expr[0], dict):
-        expr_dict = expr[0]
-        if not all(isinstance(k, str) and isinstance(v, str) for k, v in expr_dict.items()):
-            msg = "All keys and values in the aggregation dictionary must be strings."
-            raise ValueError(msg)
-        allowed_aggs = {"min", "max", "mean", "sum", "count", "first", "last"}
-        if not all(v in allowed_aggs for v in expr_dict.values()):
-            msg = f"Aggregation functions must be one of {allowed_aggs}."
-            raise ValueError(msg)
-        expr = [getattr(col(k), v)().alias(f"{v}({k})") for k, v in expr_dict.items()]
+    """Global aggregate (no groupBy) — equivalent to groupBy().agg(...)."""
+    flat = _resolve_agg_exprs(*exprs)
     return (
-        self.group_by(lit(1).alias("agg_polyspark"))
-        .agg(*expr)
-        .drop("agg_polyspark")
+        self.group_by(lit(1).alias("_spark_agg_key"))
+        .agg(*flat)
+        .drop("_spark_agg_key")
     )
 
 

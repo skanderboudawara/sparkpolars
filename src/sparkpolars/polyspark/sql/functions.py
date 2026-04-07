@@ -193,35 +193,50 @@ array_agg_distinct = collect_set
 listagg_distinct = collect_set
 
 
+def _col_name(col: str | Expr) -> str:
+    """Extract a column name string for building PySpark-style agg aliases."""
+    if isinstance(col, str):
+        return col
+    try:
+        return col.meta.output_name()
+    except Exception:
+        return "col"
+
+
 def sum(col: str | Expr) -> Expr:
-    return _str_to_col(col).sum().alias("sum")
+    return _str_to_col(col).sum().alias(f"sum({_col_name(col)})")
 
 
 def min(col: str | Expr) -> Expr:
-    return _str_to_col(col).min().alias("min")
+    return _str_to_col(col).min().alias(f"min({_col_name(col)})")
 
 
 def max(col: str | Expr) -> Expr:
-    return _str_to_col(col).max().alias("max")
+    return _str_to_col(col).max().alias(f"max({_col_name(col)})")
 
 
 def abs(col: str | Expr) -> Expr:
-    return _str_to_col(col).abs().alias("abs")
+    """Absolute value — scalar transform, keeps input column name."""
+    return _str_to_col(col).abs()
 
 
 def avg(col: str | Expr) -> Expr:
-    return _str_to_col(col).avg().alias("avg")
+    return _str_to_col(col).mean().alias(f"avg({_col_name(col)})")
 
 
-def first(col: str | Expr) -> Expr:
-    return _str_to_col(col).first().alias("first")
+def first(col: str | Expr, ignorenulls: bool = False) -> Expr:
+    e = _str_to_col(col)
+    base = e.drop_nulls().first() if ignorenulls else e.first()
+    return base.alias(f"first({_col_name(col)})")
 
 
 first_value = first
 
 
-def last(col: str | Expr) -> Expr:
-    return _str_to_col(col).last().alias("last")
+def last(col: str | Expr, ignorenulls: bool = False) -> Expr:
+    e = _str_to_col(col)
+    base = e.drop_nulls().last() if ignorenulls else e.last()
+    return base.alias(f"last({_col_name(col)})")
 
 
 last_value = last
@@ -352,9 +367,11 @@ def explode_outer(col: str | Expr) -> Expr:
     return col_expr
 
 
-def count(col: str | Expr) -> Expr:
-    col = _str_to_col(col)
-    return col.count()
+def count(col: str | Expr = "*") -> Expr:
+    name = col if isinstance(col, str) else _col_name(col)
+    if col == "*" or col == "1":
+        return pl.len().alias("count(1)")
+    return _str_to_col(col).count().alias(f"count({name})")
 
 
 coalesce = polars_functions.coalesce
@@ -716,7 +733,7 @@ def make_date(year: Any, month: Any, day: Any) -> Expr:
 # ── aggregate extras ──────────────────────────────────────────────────────────
 
 def stddev(col: str | Expr) -> Expr:
-    return _str_to_col(col).std().alias("stddev")
+    return _str_to_col(col).std().alias(f"stddev({_col_name(col)})")
 
 
 std = stddev
@@ -724,11 +741,11 @@ stddev_samp = stddev
 
 
 def stddev_pop(col: str | Expr) -> Expr:
-    return _str_to_col(col).std(ddof=0).alias("stddev_pop")
+    return _str_to_col(col).std(ddof=0).alias(f"stddev_pop({_col_name(col)})")
 
 
 def variance(col: str | Expr) -> Expr:
-    return _str_to_col(col).var().alias("variance")
+    return _str_to_col(col).var().alias(f"variance({_col_name(col)})")
 
 
 var = variance
@@ -736,11 +753,11 @@ var_samp = variance
 
 
 def var_pop(col: str | Expr) -> Expr:
-    return _str_to_col(col).var(ddof=0).alias("var_pop")
+    return _str_to_col(col).var(ddof=0).alias(f"var_pop({_col_name(col)})")
 
 
 def median(col: str | Expr) -> Expr:
-    return _str_to_col(col).median().alias("median")
+    return _str_to_col(col).median().alias(f"median({_col_name(col)})")
 
 
 def count_distinct(*cols: str | Expr) -> Expr:
@@ -1403,7 +1420,7 @@ def array_insert(col: str | Expr, pos: int, value: Any) -> Expr:
 
 def mean(col: str | Expr) -> Expr:
     """Alias for avg()."""
-    return _str_to_col(col).mean()
+    return _str_to_col(col).mean().alias(f"avg({_col_name(col)})")
 
 
 def ntile(n: int) -> _WindowFuncExpr:
@@ -1436,24 +1453,6 @@ def map_keys(col: str | Expr) -> Expr:
 def map_values(col: str | Expr) -> Expr:
     """Return values of a map column (list-of-structs with 'value' field)."""
     return _str_to_col(col).map_values()
-
-
-# ── fix first/last to support ignorenulls ─────────────────────────────────────
-
-def first(col: str | Expr, ignorenulls: bool = False) -> Expr:
-    """First value in the group; skip nulls when ignorenulls=True."""
-    e = _str_to_col(col)
-    if ignorenulls:
-        return e.drop_nulls().first()
-    return e.first()
-
-
-def last(col: str | Expr, ignorenulls: bool = False) -> Expr:
-    """Last value in the group; skip nulls when ignorenulls=True."""
-    e = _str_to_col(col)
-    if ignorenulls:
-        return e.drop_nulls().last()
-    return e.last()
 
 
 # ── fix unix_timestamp to support format string ───────────────────────────────

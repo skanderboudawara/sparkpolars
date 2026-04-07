@@ -335,8 +335,7 @@ def test_sf_negative():
 
 def test_sf_avg():
     df = pl.DataFrame({"x": [1.0, 2.0, 3.0, 4.0, 5.0]})
-    # standalone avg aliases the result column to "avg"
-    assert df.select(sf.avg(pl.col("x")))["avg"][0] == 3.0
+    assert df.select(sf.avg(pl.col("x")))["avg(x)"][0] == 3.0
 
 
 def test_sf_collect_list():
@@ -706,22 +705,20 @@ def test_sf_make_date():
 # ── aggregate extras ──────────────────────────────────────────────────────────
 
 def test_sf_stddev():
-    # [1, 2, 3]: sample stddev = 1.0
     df = pl.DataFrame({"x": [1.0, 2.0, 3.0]})
-    result = df.select(sf.stddev(pl.col("x")))["stddev"][0]
+    result = df.select(sf.stddev(pl.col("x")))["stddev(x)"][0]
     assert abs(result - 1.0) < 1e-6
 
 
 def test_sf_variance():
-    # [1, 2, 3]: sample variance = 1.0
     df = pl.DataFrame({"x": [1.0, 2.0, 3.0]})
-    result = df.select(sf.variance(pl.col("x")))["variance"][0]
+    result = df.select(sf.variance(pl.col("x")))["variance(x)"][0]
     assert abs(result - 1.0) < 1e-6
 
 
 def test_sf_median():
     df = pl.DataFrame({"x": [1.0, 2.0, 3.0, 4.0, 5.0]})
-    assert df.select(sf.median(pl.col("x")))["median"][0] == 3.0
+    assert df.select(sf.median(pl.col("x")))["median(x)"][0] == 3.0
 
 
 def test_sf_count_distinct():
@@ -1410,7 +1407,7 @@ def test_sf_array_insert():
 
 def test_sf_mean():
     df = pl.DataFrame({"x": [1.0, 2.0, 3.0]})
-    result = df.select(sf.mean(pl.col("x")))["x"][0]
+    result = df.select(sf.mean(pl.col("x")))["avg(x)"][0]
     assert result == 2.0
 
 
@@ -1460,13 +1457,13 @@ def test_sf_map_values():
 
 def test_sf_first_ignorenulls():
     df = pl.DataFrame({"x": [None, None, 3, 4]}, schema={"x": pl.Int32})
-    result = df.select(sf.first(pl.col("x"), ignorenulls=True))["x"][0]
+    result = df.select(sf.first(pl.col("x"), ignorenulls=True))["first(x)"][0]
     assert result == 3
 
 
 def test_sf_last_ignorenulls():
     df = pl.DataFrame({"x": [1, 2, None, None]}, schema={"x": pl.Int32})
-    result = df.select(sf.last(pl.col("x"), ignorenulls=True))["x"][0]
+    result = df.select(sf.last(pl.col("x"), ignorenulls=True))["last(x)"][0]
     assert result == 2
 
 
