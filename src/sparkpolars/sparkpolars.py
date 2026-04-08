@@ -64,7 +64,7 @@ def toPolars(
     polars_schema = _convert_schema_spark_to_polars(self.schema.fields, config, tz)
 
     if mode == ModeMethod.NATIVE:
-        polars_data = [_spark_row_as_dict(row, config) for row in self.collect()]
+        polars_data = [_spark_row_as_dict(row, config, tz) for row in self.collect()]
         frame_kwargs = {
             "schema_overrides" if polars_data else "schema": polars_schema,
             "data": polars_data,

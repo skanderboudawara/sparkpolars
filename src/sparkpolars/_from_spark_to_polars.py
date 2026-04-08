@@ -1,4 +1,6 @@
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from polars.datatypes import (
     Binary,
@@ -140,7 +142,7 @@ def _unpack_map(packed_dict: dict) -> list[dict]:
     return [{"key": k, "value": v} for k, v in packed_dict.items()]
 
 
-def _spark_row_as_dict(row: SparkRow, config: Config | None = None) -> dict[str, Any]:
+def _spark_row_as_dict(row: SparkRow, config: Config | None = None, tz: str | None = None) -> dict[str, Any]:
     """
     Converts a Spark Row to a dictionary.
 
@@ -148,15 +150,17 @@ def _spark_row_as_dict(row: SparkRow, config: Config | None = None) -> dict[str,
 
     :param config: The configuration of the application. Default is None.
 
+    :param tz: The target timezone. Default is None.
+
     :return: The dictionary representation of the Spark Row
     """
     if not isinstance(row, SparkRow):
         msg = "Expected a Spark Row"
         raise TypeError(msg)
-    return {key: __convert_value(value, config) for key, value in row.asDict().items()}
+    return {key: __convert_value(value, config, tz) for key, value in row.asDict().items()}
 
 
-def __convert_value(value: Any, config: Config | None = None) -> Any:
+def __convert_value(value: Any, config: Config | None = None, tz: str | None = None) -> Any:
     """
     Method support to convert value to Polars DataFrame.
 
@@ -166,14 +170,20 @@ def __convert_value(value: Any, config: Config | None = None) -> Any:
 
     :param config: The configuration of the application. Default is None.
 
+    :param tz: The target timezone. Default is None.
+
     :return: The converted value
     """
     if isinstance(value, SparkRow):
-        return _spark_row_as_dict(value, config)
+        return _spark_row_as_dict(value, config, tz)
     if isinstance(value, dict):
         return _unpack_map(value)
     if isinstance(value, list):
-        return [__convert_value(v, config) for v in value]
+        return [__convert_value(v, config, tz) for v in value]
+    if isinstance(value, datetime) and value.tzinfo is None and tz is not None:
+        # PySpark collect() returns naive datetimes in local time.
+        # Convert from local time to the session timezone.
+        return value.astimezone().astimezone(ZoneInfo(tz)).replace(tzinfo=None)
     return value
 
 

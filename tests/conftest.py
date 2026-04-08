@@ -1,5 +1,11 @@
-import pytest
+import sys
 import os
+os.environ["TZ"] = "UTC"
+os.environ["PYSPARK_PYTHON"] = sys.executable
+os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
+os.environ["JAVA_TOOL_OPTIONS"] = "-Duser.timezone=UTC"
+
+import pytest
 from pyspark.sql import SparkSession, Row
 import pyspark.sql.types as T
 import polars as pl
@@ -9,11 +15,15 @@ from zoneinfo import ZoneInfo
 
 @pytest.fixture(scope="session")
 def spark_session():
-    os.environ["TZ"] = "UTC"
     spark = SparkSession.builder \
+        .master("local[1]") \
         .appName("pytest") \
         .config("spark.sql.timezone", "UTC") \
         .config("spark.sql.session.timeZone", "UTC") \
+        .config("spark.ui.enabled", "false") \
+        .config("spark.sql.shuffle.partitions", "1") \
+        .config("spark.default.parallelism", "1") \
+        .config("spark.driver.host", "localhost") \
         .getOrCreate()
 
     yield spark
