@@ -57,6 +57,15 @@ def _schema_names(self: PolarsDataFrame | PolarsLazyDataFrame) -> list[str]:
 
 # ── drop ──────────────────────────────────────────────────────────────────────
 def drop_strict(self: PolarsDataFrame, *cols: str, strict: bool = True) -> PolarsDataFrame:
+    """Drop columns, silently ignoring non-existent ones.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> from polars.testing import assert_frame_equal
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> assert_frame_equal(df.drop("nonexistent"), df)
+    """
     existing_cols = [c for c in cols if c in self.columns]
     if not existing_cols:
         return self
@@ -81,6 +90,21 @@ def filter_spark(
     self: PolarsDataFrame | PolarsLazyDataFrame,
     condition: Any,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Filter rows by a condition (Spark-compatible).
+
+    Supports both Polars expressions and SQL string conditions.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> df.filter(pl.col("a") > 2).height
+        3
+        >>> df.filter("a > 2").height
+        3
+        >>> df.where(pl.col("a") > 2).height
+        3
+    """
     if isinstance(condition, str):
         condition = pl.sql_expr(condition)
     return self._original_filter(condition)
@@ -95,6 +119,23 @@ def sort_spark(
     descending: bool | list[bool] | None = None,
     **polars_kwargs: Any,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Sort rows by one or more columns (Spark-compatible).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> df.sort("a", ascending=False)["a"][0]
+        5
+        >>> df.sort("a", ascending=True)["a"][0]
+        1
+        >>> from polars.testing import assert_frame_equal
+        >>> assert_frame_equal(df.sort("a", ascending=False), df.orderBy("a", ascending=False))
+        >>> df.sort(["a"], ascending=False)["a"][0]
+        5
+        >>> df.sortWithinPartitions("a", ascending=True)["a"][0]
+        1
+    """
     # Native Polars internal call (e.g. concat("align") or DataFrame.sort → LazyFrame.sort)
     if by is not None or descending is not None or polars_kwargs:
         effective_by = by if by is not None else list(cols)
@@ -131,6 +172,20 @@ def sample_spark(
     fraction: float | None = None,
     seed: int | None = None,
 ) -> PolarsDataFrame:
+    """Sample a fraction of rows (Spark-compatible).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> result = df.sample(fraction=0.4, seed=42)
+        >>> isinstance(result, pl.DataFrame)
+        True
+        >>> 1 <= result.height <= df.height
+        True
+        >>> df.sample(withReplacement=True, fraction=1.0, seed=0).height == df.height
+        True
+    """
     df = self.collect() if isinstance(self, PolarsLazyDataFrame) else self
     return df._original_sample(
         fraction=fraction if fraction is not None else 1.0,
@@ -159,6 +214,28 @@ def replace_spark(
     value: Any = None,
     subset: list[str] | None = None,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Replace values in the DataFrame (Spark-compatible).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> result = df.replace(1, 99)
+        >>> 99 in result["a"].to_list()
+        True
+        >>> 1 not in result["a"].to_list()
+        True
+        >>> result2 = df.replace(1, 99, subset=["a"])
+        >>> 99 in result2["a"].to_list()
+        True
+        >>> result2["b"].to_list() == df["b"].to_list()
+        True
+        >>> result3 = df.replace({"x": "X", "y": "Y"}, subset=["b"])
+        >>> "X" in result3["b"].to_list()
+        True
+        >>> "x" not in result3["b"].to_list()
+        True
+    """
     all_cols = _schema_names(self)
     target_cols = subset if subset is not None else all_cols
     mapping = to_replace if isinstance(to_replace, dict) else {to_replace: value}
@@ -183,6 +260,17 @@ def withColumns(
     *args: Any,
     **kwargs: Any,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Add or replace columns (Spark-compatible).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> df.withColumns({"d": pl.col("a") + 10})["d"][0]
+        11
+        >>> df.withColumns(d=pl.col("a") + 10)["d"][0]
+        11
+    """
     for arg in args:
         key, val = next(iter(arg.items())) if isinstance(arg, dict) else (None, arg)
         if hasattr(val, "_explode_marker"):
@@ -217,6 +305,18 @@ def withColumn(
     name: str,
     expr: Expr,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Add or replace a single column (Spark-compatible).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> result = df.withColumn("d", pl.col("a") * 2)
+        >>> "d" in result.columns
+        True
+        >>> result["d"][0]
+        2
+    """
     return self.withColumns({name: expr})
 
 
@@ -226,6 +326,15 @@ def persist(
     *_args: Any,
     **_kwargs: Any,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Persist the DataFrame (delegates to cache).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> df.persist() is df
+        True
+    """
     return self.cache()
 
 
@@ -233,6 +342,16 @@ def persist(
 def distinct(
     self: PolarsDataFrame | PolarsLazyDataFrame,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Return distinct rows.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> duped = pl.concat([df, df])
+        >>> duped.distinct().height == df.height
+        True
+    """
     return self.unique()
 
 
@@ -240,6 +359,15 @@ def dropDuplicates(
     self: PolarsDataFrame | PolarsLazyDataFrame,
     subset: list[str] | None = None,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Drop duplicate rows, optionally considering only a subset of columns.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> df.dropDuplicates(subset=["b"]).height
+        3
+    """
     return self.unique(subset=subset, keep="first")
 
 
@@ -250,6 +378,15 @@ def dropna(
     thresh: int | None = None,
     subset: list[str] | None = None,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Drop rows containing NaN values (Spark-compatible).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1.0, float("nan"), 3.0]})
+        >>> df.dropna().height
+        2
+    """
     if how == "any" and thresh is None:
         return self.drop_nans(subset)
     msg = "dropna with 'how' or 'thresh' parameters is not implemented."
@@ -262,6 +399,15 @@ def dropnulls(
     thresh: int | None = None,
     subset: list[str] | None = None,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Drop rows containing null values.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3], "b": [None, "y", None], "c": [1.0, None, 3.0]})
+        >>> df.dropnulls().height
+        0
+    """
     if how == "any" and thresh is None:
         return self.drop_nulls(subset)
     msg = "dropna with 'how' or 'thresh' parameters is not implemented."
@@ -291,6 +437,46 @@ def join_altred_df(
     *args: Any,
     **kwargs: Any,
 ) -> PolarsDataFrame:
+    """Join two DataFrames with Spark-compatible join type aliases.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> other = pl.DataFrame({"a": [3, 4, 5, 6, 7], "b": ["z", "x", "y", "a", "b"], "c": [3.0, 4.0, 5.0, 6.0, 7.0]})
+        >>> df.join(other, on="a", how="inner").height
+        3
+        >>> set(df.join(other, on="a", how="inner")["a"].to_list()) == {3, 4, 5}
+        True
+        >>> df.join(other, on="a", how="left_outer").height
+        5
+        >>> df.join(other, on="a", how="leftouter").height
+        5
+        >>> df.join(other, on="a", how="right_outer").height
+        5
+        >>> df.join(other, on="a", how="rightouter").height
+        5
+        >>> df.join(other, on="a", how="full_outer").height
+        7
+        >>> df.join(other, on="a", how="full").height
+        7
+        >>> df.join(other, on="a", how="fullouter").height
+        7
+        >>> df.join(other, on="a", how="left_anti").height
+        2
+        >>> set(df.join(other, on="a", how="left_anti")["a"].to_list()) == {1, 2}
+        True
+        >>> df.join(other, on="a", how="leftanti").height
+        2
+        >>> df.join(other, on="a", how="semi").height
+        3
+        >>> set(df.join(other, on="a", how="semi")["a"].to_list()) == {3, 4, 5}
+        True
+        >>> df.join(other, how="cross").height
+        25
+        >>> isinstance(df.join(other, on=["a", "b", "c"], how="inner"), pl.DataFrame)
+        True
+    """
     how = _JOIN_TYPE_MAPPING.get(how, how)
     coalesce = True if how == "full" else None
     if isinstance(on, Expr) and not on.meta.is_column_selection():
@@ -356,6 +542,18 @@ def union_spark(
     self: PolarsDataFrame | PolarsLazyDataFrame,
     other: PolarsDataFrame | PolarsLazyDataFrame,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Union two DataFrames vertically (Spark-compatible).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> other = pl.DataFrame({"a": [3, 4, 5, 6, 7], "b": ["z", "x", "y", "a", "b"], "c": [3.0, 4.0, 5.0, 6.0, 7.0]})
+        >>> df.union(other).height == df.height + other.height
+        True
+        >>> df.unionAll(other).height == df.height + other.height
+        True
+    """
     return concat([self, other], how="vertical")
 
 
@@ -364,6 +562,15 @@ def unionByName(
     other: PolarsDataFrame | PolarsLazyDataFrame,
     allowMissingColumns: bool = False,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Union two DataFrames by column name (Spark-compatible).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> df.unionByName(df).height
+        10
+    """
     return concat(
         [self, other],
         how="diagonal_relaxed" if allowMissingColumns else "vertical",
@@ -374,6 +581,16 @@ def crossJoin(
     self: PolarsDataFrame | PolarsLazyDataFrame,
     other: PolarsDataFrame | PolarsLazyDataFrame,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Cross join two DataFrames (Spark-compatible).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> small = df.head(2)
+        >>> small.crossJoin(small).height
+        4
+    """
     return self.join(other, how="cross")
 
 
@@ -462,6 +679,15 @@ class SparkGroupBy:
     # ── convenience aggregation methods ──────────────────────────────────────
 
     def count(self) -> PolarsDataFrame | PolarsLazyDataFrame:
+        """Count the number of rows per group.
+
+        Examples:
+            >>> import polars as pl
+            >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+            >>> df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+            >>> df.groupBy("dept").count().sort("dept")["count"].to_list()
+            [2, 1]
+        """
         agg_expr = pl.len().alias("count")
         gb = self._group_by()
         if gb is None:
@@ -473,20 +699,56 @@ class SparkGroupBy:
         return gb.agg(agg_expr)
 
     def sum(self, *cols: str) -> PolarsDataFrame | PolarsLazyDataFrame:
+        """Compute sum of specified columns per group.
+
+        Examples:
+            >>> import polars as pl
+            >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+            >>> df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+            >>> df.groupBy("dept").sum("sal").sort("dept")["sum(sal)"].to_list()
+            [300, 300]
+        """
         exprs = [col(c).sum().alias(f"sum({c})") for c in cols] if cols else [pl.all().sum()]
         return self.agg(*exprs)
 
     def avg(self, *cols: str) -> PolarsDataFrame | PolarsLazyDataFrame:
+        """Compute average of specified columns per group.
+
+        Examples:
+            >>> import polars as pl
+            >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+            >>> df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+            >>> df.groupBy("dept").avg("sal").sort("dept")["avg(sal)"].to_list()
+            [150.0, 300.0]
+        """
         exprs = [col(c).mean().alias(f"avg({c})") for c in cols] if cols else [pl.all().mean()]
         return self.agg(*exprs)
 
     mean = avg
 
     def min(self, *cols: str) -> PolarsDataFrame | PolarsLazyDataFrame:
+        """Compute minimum of specified columns per group.
+
+        Examples:
+            >>> import polars as pl
+            >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+            >>> df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+            >>> df.groupBy("dept").min("sal").sort("dept")["min(sal)"].to_list()
+            [100, 300]
+        """
         exprs = [col(c).min().alias(f"min({c})") for c in cols] if cols else [pl.all().min()]
         return self.agg(*exprs)
 
     def max(self, *cols: str) -> PolarsDataFrame | PolarsLazyDataFrame:
+        """Compute maximum of specified columns per group.
+
+        Examples:
+            >>> import polars as pl
+            >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+            >>> df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+            >>> df.groupBy("dept").max("sal").sort("dept")["max(sal)"].to_list()
+            [200, 300]
+        """
         exprs = [col(c).max().alias(f"max({c})") for c in cols] if cols else [pl.all().max()]
         return self.agg(*exprs)
 
@@ -497,6 +759,41 @@ class SparkGroupBy:
 
 # ── groupBy / agg ─────────────────────────────────────────────────────────────
 def groupBy(self: PolarsDataFrame | PolarsLazyDataFrame, *cols: Any) -> SparkGroupBy:
+    """Group by columns and return a SparkGroupBy wrapper.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> import src.sparkpolars.polyspark.sql.functions as sf  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> result = df.groupBy("b").agg(pl.col("a").sum())
+        >>> isinstance(result, pl.DataFrame)
+        True
+        >>> "b" in result.columns
+        True
+        >>> dept_df = pl.DataFrame({"dept": ["A", "A", "B", "B"], "sal": [100, 200, 300, 400]})
+        >>> result = dept_df.groupBy("dept").agg(sf.sum("sal")).sort("dept")
+        >>> result.columns
+        ['dept', 'sum(sal)']
+        >>> result["sum(sal)"].to_list()
+        [300, 700]
+        >>> result = dept_df.groupBy("dept").agg({"sal": "sum"}).sort("dept")
+        >>> result["sum(sal)"].to_list()
+        [300, 700]
+        >>> dept_df2 = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+        >>> result = dept_df2.groupBy("dept").agg(sf.sum("sal"), sf.avg("sal"), sf.count("sal")).sort("dept")
+        >>> "sum(sal)" in result.columns and "avg(sal)" in result.columns and "count(sal)" in result.columns
+        True
+        >>> result = dept_df2.groupBy("dept").agg({"sal": ["sum", "avg"]}).sort("dept")
+        >>> "sum(sal)" in result.columns and "avg(sal)" in result.columns
+        True
+        >>> result = dept_df.groupBy("dept").count().sort("dept")
+        >>> result["count"].to_list()
+        [2, 2]
+        >>> result = pl.DataFrame({"sal": [100, 200, 300]}).groupBy().agg(sf.sum("sal"))
+        >>> result["sum(sal)"][0]
+        600
+    """
     return SparkGroupBy(self, *cols)
 
 
@@ -504,7 +801,18 @@ def agg(
     self: PolarsDataFrame | PolarsLazyDataFrame,
     *exprs: Any,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
-    """Global aggregate (no groupBy) — equivalent to groupBy().agg(...)."""
+    """Global aggregate (no groupBy) -- equivalent to groupBy().agg(...).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> import src.sparkpolars.polyspark.sql.functions as sf  # noqa: F401
+        >>> df = pl.DataFrame({"sal": [100, 200, 300]})
+        >>> df.agg(sf.sum("sal"))["sum(sal)"][0]
+        600
+        >>> df.agg({"sal": "sum"})["sum(sal)"][0]
+        600
+    """
     flat = _resolve_agg_exprs(*exprs)
     return (
         self.group_by(lit(1).alias("_spark_agg_key"))
@@ -519,26 +827,82 @@ PolarsLazyDataFrame.agg = agg
 
 # ── schema / count / isEmpty / columns helpers ────────────────────────────────
 def schema_lazy(self: PolarsLazyDataFrame) -> Any:
+    """Return schema of a LazyFrame.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> lf = pl.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"], "c": [1.0, 2.0, 3.0]}).lazy()
+        >>> "a" in lf.schema
+        True
+    """
     return self.collect_schema()
 
 
 def isEmpty_lazy(self: PolarsLazyDataFrame) -> bool:
+    """Return True if the LazyFrame is empty.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> lf = pl.DataFrame({"a": [1, 2, 3]}).lazy()
+        >>> lf.isEmpty()
+        False
+    """
     return self.limit(1).collect().is_empty()
 
 
 def count_lazy(self: PolarsLazyDataFrame) -> int:
+    """Return the row count of a LazyFrame.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> lf = pl.DataFrame({"a": [1, 2, 3, 4, 5]}).lazy()
+        >>> lf.count
+        5
+    """
     return self.collect().height
 
 
 def columns_lazy(self: PolarsLazyDataFrame) -> list[str]:
+    """Return column names of a LazyFrame.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> lf = pl.DataFrame({"a": [1], "b": [2], "c": [3]}).lazy()
+        >>> lf.columns
+        ['a', 'b', 'c']
+    """
     return self.collect_schema().names()
 
 
 def isEmpty_non_lazy(self: PolarsDataFrame) -> bool:
+    """Return True if the DataFrame is empty.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5]})
+        >>> df.isEmpty()
+        False
+        >>> pl.DataFrame({"a": pl.Series([], dtype=pl.Int64)}).isEmpty()
+        True
+    """
     return self.is_empty()
 
 
 def count_non_lazy(self: PolarsDataFrame) -> int:
+    """Return the row count of a DataFrame.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5]})
+        >>> df.count
+        5
+    """
     return self.height
 
 
@@ -549,6 +913,14 @@ def show(
     truncate: bool = True,
     vertical: bool = False,
 ) -> None:
+    """Configure display settings for the DataFrame (PySpark compatibility shim).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3]})
+        >>> df.show()
+    """
     if isinstance(self, PolarsLazyDataFrame):
         self = self.collect()
     if truncate:
@@ -568,6 +940,15 @@ def colRegex(
     self: PolarsDataFrame | PolarsLazyDataFrame,
     colName: str,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Select columns matching a regex pattern.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> df.colRegex("^[ab]$").columns
+        ['a', 'b']
+    """
     pattern = re.compile(colName)
     columns = [c for c in self.columns if pattern.search(c)]
     return self.select(columns)
@@ -578,6 +959,18 @@ def withColumnRenamed(
     existing: str,
     new: str,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Rename a single column (Spark-compatible).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> result = df.withColumnRenamed("a", "aa")
+        >>> "aa" in result.columns
+        True
+        >>> "a" not in result.columns
+        True
+    """
     return self.rename({existing: new}, strict=False)
 
 
@@ -585,6 +978,15 @@ def withColumnsRenamed(
     self: PolarsDataFrame | PolarsLazyDataFrame,
     colsMap: dict[str, str],
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Rename multiple columns (Spark-compatible).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> df.withColumnsRenamed({"a": "aa", "b": "bb"}).columns
+        ['aa', 'bb', 'c']
+    """
     return self.rename(colsMap, strict=False)
 
 
@@ -594,6 +996,25 @@ def describe(
     *cols: str,
     **kwargs: Any,
 ) -> PolarsDataFrame:
+    """Compute summary statistics (Spark-compatible).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> result = df.describe()
+        >>> isinstance(result, pl.DataFrame)
+        True
+        >>> "statistic" in result.columns
+        True
+        >>> "a" in result.columns
+        True
+        >>> result2 = df.describe("a", "c")
+        >>> "b" not in result2.columns
+        True
+        >>> "a" in result2.columns and "c" in result2.columns
+        True
+    """
     # Internal Polars call from DataFrame.describe → LazyFrame.describe(percentiles=...)
     # Delegate straight to the saved native LazyFrame implementation to avoid recursion.
     if kwargs:
@@ -614,6 +1035,18 @@ def summary_spark(
     self: PolarsDataFrame | PolarsLazyDataFrame,
     *statistics: str,
 ) -> PolarsDataFrame:
+    """Compute summary statistics (Spark-compatible alias for describe).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> result = df.summary()
+        >>> isinstance(result, pl.DataFrame)
+        True
+        >>> "statistic" in result.columns
+        True
+    """
     return describe(self)
 
 
@@ -623,6 +1056,20 @@ def fillna(
     value: Any,
     subset: list[str] | None = None,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Fill null values (Spark-compatible).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3], "b": [None, "y", None], "c": [1.0, None, 3.0]})
+        >>> df.fillna("FILLED")["b"].null_count()
+        0
+        >>> result = df.fillna(0.0, subset=["c"])
+        >>> result["c"].null_count()
+        0
+        >>> result["b"].null_count() == df["b"].null_count()
+        True
+    """
     if subset:
         return self.with_columns([pl.col(c).fill_null(value) for c in subset])
     return self.fill_null(value)
@@ -632,6 +1079,20 @@ def fillna(
 def first_row(
     self: PolarsDataFrame | PolarsLazyDataFrame,
 ) -> dict | None:
+    """Return the first row as a dict, or None if empty.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> result = df.first()
+        >>> isinstance(result, dict)
+        True
+        >>> result["a"]
+        1
+        >>> pl.DataFrame({"a": pl.Series([], dtype=pl.Int64)}).first() is None
+        True
+    """
     if isinstance(self, PolarsLazyDataFrame):
         df = self.limit(1).collect()
     else:
@@ -645,6 +1106,19 @@ def intersect(
     self: PolarsDataFrame | PolarsLazyDataFrame,
     other: PolarsDataFrame | PolarsLazyDataFrame,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Return rows that exist in both DataFrames (set intersection).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> other = pl.DataFrame({"a": [3, 4, 5, 6, 7], "b": ["z", "x", "y", "a", "b"], "c": [3.0, 4.0, 5.0, 6.0, 7.0]})
+        >>> result = df.intersect(other)
+        >>> isinstance(result, pl.DataFrame)
+        True
+        >>> set(result["a"].to_list()).issubset({3, 4, 5})
+        True
+    """
     cols = _schema_names(self)
     return self.join(other, on=cols, how="semi").unique()
 
@@ -654,6 +1128,28 @@ def intersectAll(
     self: PolarsDataFrame | PolarsLazyDataFrame,
     other: PolarsDataFrame | PolarsLazyDataFrame,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Return rows that exist in both DataFrames preserving duplicates.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df1 = pl.DataFrame({"C1": ["a", "a", "b", "c"], "C2": [1, 1, 3, 4]})
+        >>> df2 = pl.DataFrame({"C1": ["a", "a", "b"], "C2": [1, 1, 3]})
+        >>> result = df1.intersectAll(df2).sort("C1", "C2")
+        >>> result.height
+        3
+        >>> result.to_dicts()
+        [{'C1': 'a', 'C2': 1}, {'C1': 'a', 'C2': 1}, {'C1': 'b', 'C2': 3}]
+        >>> df3 = pl.DataFrame({"C1": ["a", "b"], "C2": [1, 3]})
+        >>> result2 = df1.intersectAll(df3).sort("C1", "C2")
+        >>> result2.height
+        2
+        >>> result2["C1"].to_list()
+        ['a', 'b']
+        >>> df4 = pl.DataFrame({"C1": ["x", "y"], "C2": [9, 10]})
+        >>> df1.intersectAll(df4).height
+        0
+    """
     df1 = self.collect() if isinstance(self, PolarsLazyDataFrame) else self
     df2 = other.collect() if isinstance(other, PolarsLazyDataFrame) else other
     cols = df1.columns
@@ -676,16 +1172,45 @@ def subtract(
     self: PolarsDataFrame | PolarsLazyDataFrame,
     other: PolarsDataFrame | PolarsLazyDataFrame,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Return rows in self that are not in other (set difference).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> other = pl.DataFrame({"a": [3, 4, 5, 6, 7], "b": ["z", "x", "y", "a", "b"], "c": [3.0, 4.0, 5.0, 6.0, 7.0]})
+        >>> result = df.subtract(other)
+        >>> all(v in {1, 2} for v in result["a"].to_list())
+        True
+    """
     cols = _schema_names(self)
     return self.join(other, on=cols, how="anti").unique()
 
 
 # ── isLocal / isStreaming ─────────────────────────────────────────────────────
 def isLocal(self: PolarsDataFrame | PolarsLazyDataFrame) -> bool:
+    """Return True (Polars DataFrames are always local).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3]})
+        >>> df.isLocal()
+        True
+    """
     return True
 
 
 def _isStreaming(self: PolarsDataFrame | PolarsLazyDataFrame) -> bool:
+    """Return False (Polars DataFrames are not streaming).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3]})
+        >>> df.isStreaming
+        False
+    """
     return False
 
 
@@ -697,6 +1222,21 @@ def melt_spark(
     var_name: str = "variable",
     value_name: str = "value",
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Unpivot a DataFrame from wide to long format (Spark-compatible melt).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"id": [1, 2], "val_a": [10, 20], "val_b": [30, 40]})
+        >>> result = df.melt(id_vars=["id"], value_vars=["val_a", "val_b"])
+        >>> "variable" in result.columns and "value" in result.columns
+        True
+        >>> result.height
+        4
+        >>> result2 = df.melt(id_vars=["id"], value_vars=["val_a", "val_b"], var_name="metric", value_name="amount")
+        >>> "metric" in result2.columns and "amount" in result2.columns
+        True
+    """
     return self.unpivot(
         on=value_vars,
         index=id_vars,
@@ -710,11 +1250,32 @@ def offset_spark(
     self: PolarsDataFrame | PolarsLazyDataFrame,
     n: int,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Skip the first n rows.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> result = df.offset(2)
+        >>> result.height
+        3
+        >>> result["a"][0]
+        3
+    """
     return self.slice(n)
 
 
 # ── printSchema ───────────────────────────────────────────────────────────────
 def printSchema(self: PolarsDataFrame | PolarsLazyDataFrame) -> None:
+    """Print the schema of the DataFrame.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1], "b": ["x"]})
+        >>> df.printSchema()
+        Schema([('a', Int64), ('b', String)])
+    """
     schema = self.collect_schema() if isinstance(self, PolarsLazyDataFrame) else self.schema
     print(schema)  # noqa: T201
 
@@ -725,6 +1286,25 @@ def randomSplit(
     weights: list[float],
     seed: int | None = None,
 ) -> list[PolarsDataFrame]:
+    """Split a DataFrame into multiple parts by weight.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> splits = df.randomSplit([0.6, 0.4], seed=42)
+        >>> len(splits)
+        2
+        >>> sum(len(s) for s in splits) == df.height
+        True
+        >>> all(isinstance(s, pl.DataFrame) for s in splits)
+        True
+        >>> splits3 = df.randomSplit([0.5, 0.3, 0.2], seed=1)
+        >>> len(splits3)
+        3
+        >>> sum(len(s) for s in splits3) == df.height
+        True
+    """
     df = self.collect() if isinstance(self, PolarsLazyDataFrame) else self
     n = len(df)
     indices = list(range(n))
@@ -745,6 +1325,18 @@ def selectExpr(
     self: PolarsDataFrame | PolarsLazyDataFrame,
     *exprs: str,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Select columns using SQL expressions (Spark-compatible).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> result = df.selectExpr("a", "b")
+        >>> result.columns
+        ['a', 'b']
+        >>> result.height == df.height
+        True
+    """
     return self.select([pl.sql_expr(e) if isinstance(e, str) else e for e in exprs])
 
 
@@ -753,6 +1345,22 @@ def take_spark(
     self: PolarsDataFrame | PolarsLazyDataFrame,
     n: int,
 ) -> list[dict]:
+    """Return the first n rows as a list of dicts.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> result = df.take(3)
+        >>> isinstance(result, list)
+        True
+        >>> len(result)
+        3
+        >>> isinstance(result[0], dict)
+        True
+        >>> result[0]["a"]
+        1
+    """
     if isinstance(self, PolarsLazyDataFrame):
         return self.limit(n).collect().to_dicts()
     return self.head(n).to_dicts()
@@ -760,6 +1368,19 @@ def take_spark(
 
 # ── toArrow ───────────────────────────────────────────────────────────────────
 def toArrow(self: PolarsDataFrame | PolarsLazyDataFrame) -> Any:
+    """Convert to a PyArrow Table.
+
+    Examples:
+        >>> import polars as pl
+        >>> import pyarrow as pa
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> result = df.toArrow()
+        >>> isinstance(result, pa.Table)
+        True
+        >>> result.num_rows
+        5
+    """
     df = self.collect() if isinstance(self, PolarsLazyDataFrame) else self
     return df.to_arrow()
 
@@ -769,6 +1390,15 @@ def toDF(
     self: PolarsDataFrame | PolarsLazyDataFrame,
     *cols: str,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Rename all columns (Spark-compatible).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> df.toDF("x", "y", "z").columns
+        ['x', 'y', 'z']
+    """
     current = _schema_names(self)
     if len(cols) != len(current):
         msg = f"toDF expects {len(current)} column names, got {len(cols)}."
@@ -778,12 +1408,37 @@ def toDF(
 
 # ── toJSON ────────────────────────────────────────────────────────────────────
 def toJSON(self: PolarsDataFrame | PolarsLazyDataFrame) -> str:
+    """Convert to JSON string.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> result = df.toJSON()
+        >>> isinstance(result, str)
+        True
+        >>> '"a"' in result
+        True
+    """
     df = self.collect() if isinstance(self, PolarsLazyDataFrame) else self
     return df.write_json()
 
 
 # ── toPandas ──────────────────────────────────────────────────────────────────
 def toPandas(self: PolarsDataFrame | PolarsLazyDataFrame) -> Any:
+    """Convert to a pandas DataFrame.
+
+    Examples:
+        >>> import polars as pl
+        >>> import pandas as pd
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> result = df.toPandas()
+        >>> isinstance(result, pd.DataFrame)
+        True
+        >>> list(result.columns)
+        ['a', 'b', 'c']
+    """
     df = self.collect() if isinstance(self, PolarsLazyDataFrame) else self
     return df.to_pandas()
 
@@ -795,6 +1450,21 @@ def transform_spark(
     *args: Any,
     **kwargs: Any,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Apply a function to the DataFrame (Spark-compatible).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> def add_col(df):
+        ...     return df.with_columns(pl.col("a").alias("a2"))
+        >>> "a2" in df.transform(add_col).columns
+        True
+        >>> def multiply(df, factor):
+        ...     return df.with_columns((pl.col("a") * factor).alias("a_scaled"))
+        >>> df.transform(multiply, 10)["a_scaled"][0]
+        10
+    """
     return func(self, *args, **kwargs)
 
 
@@ -804,6 +1474,18 @@ def transpose_lazy(
     *args: Any,
     **kwargs: Any,
 ) -> PolarsDataFrame:
+    """Transpose a LazyFrame (collects first).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> lf = pl.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}).lazy()
+        >>> result = lf.transpose()
+        >>> isinstance(result, pl.DataFrame)
+        True
+        >>> result.shape
+        (2, 3)
+    """
     return self.collect().transpose(*args, **kwargs)
 
 
@@ -850,14 +1532,41 @@ class DataFrameWriter:
     # ── builder methods ───────────────────────────────────────────────────────
 
     def mode(self, saveMode: str) -> "DataFrameWriter":
+        """Set the save mode for the writer.
+
+        Examples:
+            >>> import polars as pl
+            >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+            >>> df = pl.DataFrame({"a": [1]})
+            >>> df.write.mode("overwrite")._mode
+            'overwrite'
+        """
         self._mode = saveMode.lower()
         return self
 
     def format(self, source: str) -> "DataFrameWriter":
+        """Set the output format for the writer.
+
+        Examples:
+            >>> import polars as pl
+            >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+            >>> df = pl.DataFrame({"a": [1]})
+            >>> df.write.format("parquet")._fmt
+            'parquet'
+        """
         self._fmt = source.lower()
         return self
 
     def option(self, key: str, value: Any) -> "DataFrameWriter":
+        """Set a single writer option.
+
+        Examples:
+            >>> import polars as pl
+            >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+            >>> df = pl.DataFrame({"a": [1]})
+            >>> df.write.option("k", "v")._options["k"]
+            'v'
+        """
         self._options[key] = value
         return self
 
@@ -1009,6 +1718,21 @@ def exists(
 
         # NOT EXISTS → anti join
         outer_df.join(inner_df.select("key").unique(), on="key", how="anti")
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5]})
+        >>> df.exists()
+        True
+        >>> pl.DataFrame({"a": pl.Series([], dtype=pl.Int64)}).exists()
+        False
+        >>> customers = pl.DataFrame({"customer_id": [101, 102, 103, 104], "country": ["USA", "Canada", "USA", "Australia"]})
+        >>> orders = pl.DataFrame({"customer_id": [101, 102, 103, 101]})
+        >>> set(customers.join(orders.select("customer_id").unique(), on="customer_id", how="semi")["customer_id"].to_list()) == {101, 102, 103}
+        True
+        >>> customers.join(orders.select("customer_id").unique(), on="customer_id", how="anti")["customer_id"].to_list()
+        [104]
     """
     if isinstance(self, PolarsLazyDataFrame):
         return self.limit(1).collect().height > 0
@@ -1022,6 +1746,16 @@ def lateralJoin(
     on: Any = None,
     how: str | None = None,
 ) -> PolarsDataFrame | PolarsLazyDataFrame:
+    """Lateral join (Spark-compatible).
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> small = df.head(2)
+        >>> small.lateralJoin(small).height
+        4
+    """
     # Cross join: no predicate or explicit cross
     if on is None or how == "cross":
         return self.join(other, how="cross")
@@ -1038,6 +1772,14 @@ def foreach(
     self: PolarsDataFrame | PolarsLazyDataFrame,
     func: Any,
 ) -> None:
+    """Apply a function to each row of the DataFrame.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> collected = []; pl.DataFrame({"a": [1, 2, 3]}).foreach(lambda row: collected.append(row["a"])); collected
+        [1, 2, 3]
+    """
     df = self.collect() if isinstance(self, PolarsLazyDataFrame) else self
     for row in df.iter_rows(named=True):
         func(row)
@@ -1083,6 +1825,20 @@ def corr_spark(
     col2: str,
     method: str = "pearson",
 ) -> float:
+    """Compute the correlation between two columns.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> result = df.corr("a", "c")
+        >>> isinstance(result, float)
+        True
+        >>> abs(result - 1.0) < 1e-9
+        True
+        >>> isinstance(df.corr("a", "c", method="spearman"), float)
+        True
+    """
     df = self.collect() if isinstance(self, PolarsLazyDataFrame) else self
     return pl.select(pl.corr(df[col1], df[col2], method=method)).item()
 
@@ -1092,6 +1848,18 @@ def cov_spark(
     col1: str,
     col2: str,
 ) -> float:
+    """Compute the covariance between two columns.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> result = df.cov("a", "c")
+        >>> isinstance(result, float)
+        True
+        >>> result > 0
+        True
+    """
     df = self.collect() if isinstance(self, PolarsLazyDataFrame) else self
     return pl.select(pl.cov(df[col1], df[col2])).item()
 
@@ -1102,18 +1870,52 @@ def explain(
     *args: Any,
     **kwargs: Any,
 ) -> str:
+    """Return the query plan as a string.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> result = df.explain()
+        >>> isinstance(result, str)
+        True
+        >>> len(result) > 0
+        True
+    """
     lf = self.lazy() if isinstance(self, PolarsDataFrame) else self
     return lf.explain(*args, **kwargs)
 
 
 # ── na (DataFrameNaFunctions wrapper) ─────────────────────────────────────────
 class DataFrameNaFunctions:
-    """Spark-compatible na accessor: df.na.fill / df.na.drop / df.na.replace."""
+    """Spark-compatible na accessor: df.na.fill / df.na.drop / df.na.replace.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+        >>> df = pl.DataFrame({"a": [1, 2, 3], "b": [None, "y", None], "c": [1.0, None, 3.0]})
+        >>> df.na.fill("X")["b"].null_count()
+        0
+        >>> df.na.drop().height
+        0
+        >>> df2 = pl.DataFrame({"a": [1, 2, 3, 4, 5], "b": ["x", "y", "z", "x", "y"], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+        >>> 99 in df2.na.replace(1, 99)["a"].to_list()
+        True
+    """
 
     def __init__(self, df: PolarsDataFrame | PolarsLazyDataFrame) -> None:
         self._df = df
 
     def fill(self, value: Any, subset: list[str] | None = None) -> PolarsDataFrame | PolarsLazyDataFrame:
+        """Fill null values with the given value.
+
+        Examples:
+            >>> import polars as pl
+            >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+            >>> df = pl.DataFrame({"a": [1, None, 3]})
+            >>> df.na.fill(0)["a"].to_list()
+            [1, 0, 3]
+        """
         return fillna(self._df, value, subset=subset)
 
     def drop(
@@ -1122,6 +1924,15 @@ class DataFrameNaFunctions:
         thresh: int | None = None,
         subset: list[str] | None = None,
     ) -> PolarsDataFrame | PolarsLazyDataFrame:
+        """Drop rows containing null values.
+
+        Examples:
+            >>> import polars as pl
+            >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+            >>> df = pl.DataFrame({"a": [1, None, 3]})
+            >>> df.na.drop().height
+            2
+        """
         return dropnulls(self._df, how=how, thresh=thresh, subset=subset)
 
     def replace(
@@ -1130,6 +1941,15 @@ class DataFrameNaFunctions:
         value: Any = None,
         subset: list[str] | None = None,
     ) -> PolarsDataFrame | PolarsLazyDataFrame:
+        """Replace matching values in the DataFrame.
+
+        Examples:
+            >>> import polars as pl
+            >>> import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+            >>> df = pl.DataFrame({"a": [1, 2, 3]})
+            >>> df.na.replace(1, 99)["a"].to_list()
+            [99, 2, 3]
+        """
         return replace_spark(self._df, to_replace, value, subset=subset)
 
 
@@ -1143,6 +1963,17 @@ def _frame_for_sql(self: PolarsDataFrame | PolarsLazyDataFrame) -> PolarsDataFra
 
 
 def createTempView(self: PolarsDataFrame | PolarsLazyDataFrame, name: str) -> None:
+    """Register as a local temp view. Raises if the name already exists.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe as _mod
+        >>> df = pl.DataFrame({"a": [1, 2, 3]})
+        >>> df.createOrReplaceTempView("_doctest_ct")
+        >>> _mod._local_sql_ctx.execute("SELECT * FROM _doctest_ct").collect().height
+        3
+        >>> _ = _mod._local_sql_ctx.unregister("_doctest_ct")
+    """
     if name in _local_sql_ctx.tables():
         msg = f"Temp view '{name}' already exists. Use createOrReplaceTempView to overwrite."
         raise RuntimeError(msg)
@@ -1150,10 +1981,32 @@ def createTempView(self: PolarsDataFrame | PolarsLazyDataFrame, name: str) -> No
 
 
 def createOrReplaceTempView(self: PolarsDataFrame | PolarsLazyDataFrame, name: str) -> None:
+    """Register as a local temp view, replacing any existing view with the same name.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe as _mod
+        >>> df = pl.DataFrame({"a": [1, 2, 3]})
+        >>> df.createOrReplaceTempView("_doctest_cort")
+        >>> "_doctest_cort" in _mod._local_sql_ctx.tables()
+        True
+        >>> _ = _mod._local_sql_ctx.unregister("_doctest_cort")
+    """
     _local_sql_ctx.register(name, _frame_for_sql(self))
 
 
 def createGlobalTempView(self: PolarsDataFrame | PolarsLazyDataFrame, name: str) -> None:
+    """Register as a global temp view. Raises if the name already exists.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe as _mod
+        >>> df = pl.DataFrame({"a": [1, 2, 3]})
+        >>> df.createOrReplaceGlobalTempView("_doctest_cgt")
+        >>> "_doctest_cgt" in _mod._global_sql_ctx.tables()
+        True
+        >>> _ = _mod._global_sql_ctx.unregister("_doctest_cgt")
+    """
     if name in _global_sql_ctx.tables():
         msg = f"Global temp view '{name}' already exists. Use createOrReplaceGlobalTempView to overwrite."
         raise RuntimeError(msg)
@@ -1161,6 +2014,17 @@ def createGlobalTempView(self: PolarsDataFrame | PolarsLazyDataFrame, name: str)
 
 
 def createOrReplaceGlobalTempView(self: PolarsDataFrame | PolarsLazyDataFrame, name: str) -> None:
+    """Register as a global temp view, replacing any existing view with the same name.
+
+    Examples:
+        >>> import polars as pl
+        >>> import src.sparkpolars.polyspark.sql.dataframe as _mod
+        >>> df = pl.DataFrame({"a": [10, 20]})
+        >>> df.createOrReplaceGlobalTempView("_doctest_corgt")
+        >>> "_doctest_corgt" in _mod._global_sql_ctx.tables()
+        True
+        >>> _ = _mod._global_sql_ctx.unregister("_doctest_corgt")
+    """
     _global_sql_ctx.register(name, _frame_for_sql(self))
 
 
