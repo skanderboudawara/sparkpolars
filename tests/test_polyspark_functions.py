@@ -1512,3 +1512,186 @@ def test_sf_posexplode_raises():
 def test_sf_window_raises():
     with _pytest.raises(NotImplementedError):
         sf.window(pl.col("ts"), "1 day")
+
+
+# ── batch-4: aliases & new functions ─────────────────────────────────────────
+
+def test_sf_ln():
+    import math
+    df = pl.DataFrame({"x": [math.e]})
+    result = df.select(sf.ln(pl.col("x")))["x"][0]
+    assert abs(result - 1.0) < 1e-6
+
+
+def test_sf_sha_alias():
+    df = pl.DataFrame({"s": ["hello"]})
+    import hashlib
+    expected = hashlib.sha1(b"hello").hexdigest()
+    result = df.select(sf.sha(pl.col("s")))["s"][0]
+    assert result == expected
+
+
+def test_sf_cardinality():
+    df = pl.DataFrame({"a": [[1, 2, 3]]})
+    assert df.select(sf.cardinality(pl.col("a")))["a"][0] == 3
+
+
+def test_sf_approx_count_distinct():
+    df = pl.DataFrame({"x": [1, 2, 2, 3, 3, 3]})
+    result = df.select(sf.approx_count_distinct(pl.col("x")))
+    assert "approx_count_distinct(x)" in result.columns
+    assert result["approx_count_distinct(x)"][0] >= 1
+
+
+def test_sf_approxCountDistinct_alias():
+    df = pl.DataFrame({"x": [1, 1, 2, 3]})
+    result = df.select(sf.approxCountDistinct(pl.col("x")))
+    assert "approx_count_distinct(x)" in result.columns
+
+
+def test_sf_sum_distinct():
+    df = pl.DataFrame({"x": [1, 2, 2, 3]})
+    result = df.select(sf.sum_distinct(pl.col("x")))
+    assert result["sum_distinct(x)"][0] == 6  # 1+2+3
+
+
+def test_sf_sumDistinct_alias():
+    df = pl.DataFrame({"x": [1, 1, 2]})
+    result = df.select(sf.sumDistinct(pl.col("x")))
+    assert "sum_distinct(x)" in result.columns
+
+
+def test_sf_regexp_alias():
+    df = pl.DataFrame({"s": ["hello", "world"]})
+    result = df.select(sf.regexp(pl.col("s"), "hel"))
+    assert result["s"][0] is True
+    assert result["s"][1] is False
+
+
+def test_sf_format_number():
+    df = pl.DataFrame({"x": [1234.5678]})
+    result = df.select(sf.format_number(pl.col("x"), 2))["x"][0]
+    assert result == "1234.57"
+
+
+def test_sf_format_number_zero_decimals():
+    df = pl.DataFrame({"x": [3.9]})
+    result = df.select(sf.format_number(pl.col("x"), 0))["x"][0]
+    assert result == "4"
+
+
+def test_sf_regexp_instr():
+    df = pl.DataFrame({"s": ["abcabc", "xyz"]})
+    result = df.select(sf.regexp_instr(pl.col("s"), "b"))["s"].to_list()
+    assert result[0] == 2  # 1-based
+    assert result[1] == 0  # no match
+
+
+def test_sf_typeof():
+    df = pl.DataFrame({"x": [1, 2, 3]})
+    result = df.select(sf.typeof(pl.col("x")))["x"][0]
+    assert "Int64" in result or "Int" in result
+
+
+def test_sf_uniform_length():
+    df = pl.DataFrame({"x": [1, 2, 3, 4, 5]})
+    result = df.select(sf.uniform(0.0, 1.0, seed=42).alias("r"))["r"]
+    assert len(result) == 5
+    assert all(0.0 <= v <= 1.0 for v in result)
+
+
+def test_sf_uniform_seeded_reproducible():
+    df = pl.DataFrame({"x": [1, 2, 3]})
+    r1 = df.select(sf.uniform(0.0, 10.0, seed=99).alias("r"))["r"].to_list()
+    r2 = df.select(sf.uniform(0.0, 10.0, seed=99).alias("r"))["r"].to_list()
+    assert r1 == r2
+
+
+def test_sf_percentile_approx():
+    df = pl.DataFrame({"x": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]})
+    result = df.select(sf.percentile_approx(pl.col("x"), 0.5))
+    col_name = "percentile_approx(x, 0.5)"
+    assert col_name in result.columns
+    assert result[col_name][0] in (5, 6)  # nearest to 50th percentile
+
+
+def test_sf_map_contains_key_true():
+    df = pl.DataFrame({
+        "m": [[{"key": "a", "value": 1}, {"key": "b", "value": 2}]]
+    })
+    result = df.select(sf.map_contains_key(pl.col("m"), "a"))["m"][0]
+    assert result is True
+
+
+def test_sf_map_contains_key_false():
+    df = pl.DataFrame({
+        "m": [[{"key": "a", "value": 1}]]
+    })
+    result = df.select(sf.map_contains_key(pl.col("m"), "z"))["m"][0]
+    assert result is False
+
+
+def test_sf_map_entries_identity():
+    entries = [{"key": "a", "value": 1}]
+    df = pl.DataFrame({"m": [entries]})
+    result = df.select(sf.map_entries(pl.col("m")))["m"][0]
+    assert result[0]["key"] == "a"
+
+
+def test_sf_map_from_arrays():
+    df = pl.DataFrame({"k": [["a", "b"]], "v": [[1, 2]]})
+    result = df.select(sf.map_from_arrays(pl.col("k"), pl.col("v")).alias("m"))["m"][0]
+    keys = [e["key"] for e in result]
+    vals = [e["value"] for e in result]
+    assert keys == ["a", "b"]
+    assert vals == [1, 2]
+
+
+def test_sf_named_struct():
+    df = pl.DataFrame({"x": [1], "y": [2]})
+    result = df.select(sf.named_struct("a", pl.col("x"), "b", pl.col("y")).alias("s"))
+    s = result["s"][0]
+    assert s["a"] == 1
+    assert s["b"] == 2
+
+
+def test_sf_named_struct_odd_args_raises():
+    with pytest.raises(ValueError, match="even"):
+        sf.named_struct("a", pl.col("x"), "b")
+
+
+def test_sf_json_tuple():
+    df = pl.DataFrame({"j": ['{"name":"Alice","age":30}']})
+    result = df.select(sf.json_tuple(pl.col("j"), "name", "age").alias("s"))
+    s = result["s"][0]
+    assert s["name"] == "Alice"
+    assert s["age"] == "30"
+
+
+def test_sf_map_from_entries_identity():
+    entries = [{"key": "x", "value": 99}]
+    df = pl.DataFrame({"m": [entries]})
+    result = df.select(sf.map_from_entries(pl.col("m")))["m"][0]
+    assert result[0]["key"] == "x"
+
+
+def test_sf_map_concat():
+    df = pl.DataFrame({
+        "m1": [[{"key": "a", "value": 1}]],
+        "m2": [[{"key": "b", "value": 2}]],
+    })
+    result = df.select(sf.map_concat(pl.col("m1"), pl.col("m2")).alias("m"))["m"][0]
+    keys = [e["key"] for e in result]
+    assert "a" in keys and "b" in keys
+
+
+def test_sf_assert_true_passes():
+    df = pl.DataFrame({"x": [True, True]})
+    # Should not raise
+    df.select(sf.assert_true(pl.col("x")).alias("r"))
+
+
+def test_sf_assert_true_fails():
+    df = pl.DataFrame({"x": [True, False]})
+    with pytest.raises(RuntimeError):
+        df.select(sf.assert_true(pl.col("x")).alias("r"))

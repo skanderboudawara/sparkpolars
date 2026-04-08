@@ -1490,32 +1490,56 @@ def metaphone(col: str | Expr) -> Expr:  # noqa: ARG001
     raise NotImplementedError("metaphone is not supported in Polars")
 
 
-def json_tuple(col: str | Expr, *fields: str) -> Expr:  # noqa: ARG001
-    raise NotImplementedError("json_tuple is not supported in Polars")
+def json_tuple(col: str | Expr, *fields: str) -> Expr:
+    """Extract multiple JSON fields into a struct column."""
+    c = _str_to_col(col)
+    field_exprs = [c.str.json_path_match(f"$.{f}").alias(f) for f in fields]
+    return polars_functions.struct(field_exprs)
 
 
 def from_json(col: str | Expr, schema: Any) -> Expr:  # noqa: ARG001
     raise NotImplementedError("from_json is not supported in Polars")
 
 
-def map_from_entries(col: str | Expr) -> Expr:  # noqa: ARG001
-    raise NotImplementedError("map_from_entries is not supported in Polars")
+def map_from_entries(col: str | Expr) -> Expr:
+    """Identity — Polars already stores maps as list(struct({key, value}))."""
+    return _str_to_col(col)
 
 
-def map_concat(*cols: str | Expr) -> Expr:  # noqa: ARG001
-    raise NotImplementedError("map_concat is not supported in Polars")
+def map_concat(*cols: str | Expr) -> Expr:
+    """Concatenate map columns (list-of-structs) into one."""
+    exprs = [_str_to_col(c) for c in cols]
+    return polars_functions.concat_list(*exprs)
 
 
-def map_filter(col: str | Expr, f: Callable) -> Expr:  # noqa: ARG001
-    raise NotImplementedError("map_filter is not supported in Polars")
+def map_filter(col: str | Expr, f: Callable) -> Expr:
+    """Keep only entries where f(key, value) is True."""
+    c = _str_to_col(col)
+    return c.list.eval(
+        pl.element().filter(f(pl.element().struct.field("key"), pl.element().struct.field("value")))
+    )
 
 
-def transform_keys(col: str | Expr, f: Callable) -> Expr:  # noqa: ARG001
-    raise NotImplementedError("transform_keys is not supported in Polars")
+def transform_keys(col: str | Expr, f: Callable) -> Expr:
+    """Apply f(key, value) to every key in a map column."""
+    c = _str_to_col(col)
+    return c.list.eval(
+        polars_functions.struct(
+            f(pl.element().struct.field("key"), pl.element().struct.field("value")).alias("key"),
+            pl.element().struct.field("value").alias("value"),
+        )
+    )
 
 
-def transform_values(col: str | Expr, f: Callable) -> Expr:  # noqa: ARG001
-    raise NotImplementedError("transform_values is not supported in Polars")
+def transform_values(col: str | Expr, f: Callable) -> Expr:
+    """Apply f(key, value) to every value in a map column."""
+    c = _str_to_col(col)
+    return c.list.eval(
+        polars_functions.struct(
+            pl.element().struct.field("key").alias("key"),
+            f(pl.element().struct.field("key"), pl.element().struct.field("value")).alias("value"),
+        )
+    )
 
 
 def grouping(col: str | Expr) -> Expr:  # noqa: ARG001
@@ -1530,8 +1554,17 @@ def input_file_name() -> Expr:
     raise NotImplementedError("input_file_name is not applicable to Polars DataFrames")
 
 
-def assert_true(col: str | Expr, error_msg: str = "") -> Expr:  # noqa: ARG001
-    raise NotImplementedError("assert_true is not supported in Polars")
+def assert_true(col: str | Expr, error_msg: str = "") -> Expr:
+    """Raise a RuntimeError if any value in *col* is False/null; else return null column."""
+    c = _str_to_col(col)
+
+    def _check(s: pl.Series) -> pl.Series:
+        if not s.cast(pl.Boolean).fill_null(False).all():
+            msg = error_msg or f"assert_true failed: {s.name}"
+            raise RuntimeError(msg)
+        return pl.Series([None] * len(s), dtype=pl.Null)
+
+    return c.map_batches(_check, return_dtype=pl.Null)
 
 
 def schema_of_csv(col: str | Expr) -> Expr:  # noqa: ARG001
@@ -1552,3 +1585,142 @@ def posexplode(col: str | Expr) -> Expr:  # noqa: ARG001
 
 def posexplode_outer(col: str | Expr) -> Expr:  # noqa: ARG001
     raise NotImplementedError("posexplode_outer is not supported; use explode() with a row index instead")
+
+
+# ── batch-4: aliases & new functions ─────────────────────────────────────────
+
+def ln(col: str | Expr) -> Expr:
+    """Natural logarithm (alias for log with base e)."""
+    return _str_to_col(col).log(2.718281828459045)
+
+
+sha = sha1  # SHA-1 alias
+
+
+def cardinality(col: str | Expr) -> Expr:
+    """Number of elements in an array/map column (alias for size)."""
+    return _str_to_col(col).list.len()
+
+
+def approx_count_distinct(col: str | Expr) -> Expr:
+    """Approximate distinct count (HyperLogLog approximation via n_unique)."""
+    c = _str_to_col(col)
+    name = _col_name(col)
+    return c.approx_n_unique().alias(f"approx_count_distinct({name})")
+
+
+approxCountDistinct = approx_count_distinct
+
+
+def sum_distinct(col: str | Expr) -> Expr:
+    """Sum of distinct values."""
+    c = _str_to_col(col)
+    name = _col_name(col)
+    return c.drop_nulls().unique().sum().alias(f"sum_distinct({name})")
+
+
+sumDistinct = sum_distinct
+
+
+def regexp(col: str | Expr, pattern: str) -> Expr:
+    """Alias for regexp_like."""
+    return regexp_like(col, pattern)
+
+
+def format_number(col: str | Expr, d: int) -> Expr:
+    """Format a number to *d* decimal places as a string."""
+    import builtins as _b
+    fmt = f"{{:.{_b.max(0, d)}f}}"
+    return _str_to_col(col).map_elements(lambda v: fmt.format(v), return_dtype=pl.String)
+
+
+def regexp_instr(col: str | Expr, pattern: str) -> Expr:
+    """Return 1-based start position of first regex match, 0 if no match."""
+    import re as _re
+    def _find(s: str) -> int:
+        if s is None:
+            return None
+        m = _re.search(pattern, s)
+        return (m.start() + 1) if m else 0
+    return _str_to_col(col).map_elements(_find, return_dtype=pl.Int64)
+
+
+def typeof(col: str | Expr) -> Expr:
+    """Return the Polars dtype of the column as a string literal."""
+    c = _str_to_col(col)
+
+    def _dtype_name(s: pl.Series) -> pl.Series:
+        return pl.Series([str(s.dtype)] * len(s))
+
+    return c.map_batches(_dtype_name, return_dtype=pl.String)
+
+
+def uniform(min_val: float, max_val: float, seed: int | None = None) -> Expr:
+    """Uniformly distributed random float in [min_val, max_val] per row."""
+    import random as _random
+    rng = _random.Random(seed)
+
+    def _uniform(s: pl.Series) -> pl.Series:
+        return pl.Series([rng.uniform(min_val, max_val) for _ in range(len(s))], dtype=pl.Float64)
+
+    return polars_functions.int_range(start=0, end=polars_functions.len(), dtype=pl.Int64).map_batches(
+        _uniform, return_dtype=pl.Float64
+    )
+
+
+def percentile_approx(col: str | Expr, percentage: float, accuracy: int = 10000) -> Expr:  # noqa: ARG002
+    """Approximate percentile (exact via Polars quantile)."""
+    c = _str_to_col(col)
+    name = _col_name(col)
+    return c.quantile(percentage, interpolation="nearest").alias(f"percentile_approx({name}, {percentage})")
+
+
+def zip_with(col1: str | Expr, col2: str | Expr, f: Callable) -> Expr:
+    """Element-wise merge of two list columns using function f(x, y)."""
+    c1 = _str_to_col(col1)
+    c2 = _str_to_col(col2)
+    return polars_functions.concat_list(c1, c2).list.eval(
+        f(pl.element().list.first(), pl.element().list.last())
+    )
+
+
+# ── map/struct extras (batch-4) ───────────────────────────────────────────────
+
+def map_contains_key(col: str | Expr, key: Any) -> Expr:
+    """Return True if the map column contains *key*."""
+    return _str_to_col(col).list.eval(
+        pl.element().struct.field("key").eq(pl.lit(key))
+    ).list.any()
+
+
+def map_entries(col: str | Expr) -> Expr:
+    """Return list of structs {key, value} — identity for Polars map columns."""
+    return _str_to_col(col)
+
+
+def map_from_arrays(keys: str | Expr, values: str | Expr) -> Expr:
+    """Build a map column (list-of-structs) from parallel key and value list columns."""
+    k = _str_to_col(keys)
+    v = _str_to_col(values)
+
+    def _zip_row(row: dict) -> list:
+        return [{"key": ki, "value": vi} for ki, vi in zip(row["keys"] or [], row["values"] or [])]
+
+    return polars_functions.struct(k.alias("keys"), v.alias("values")).map_elements(
+        _zip_row, return_dtype=pl.List(pl.Struct({"key": pl.String, "value": pl.Int64}))
+    )
+
+
+def named_struct(*args: Any) -> Expr:
+    """Build a struct from alternating name/value pairs: named_struct("a", col1, "b", col2)."""
+    if len(args) % 2 != 0:
+        raise ValueError("named_struct requires an even number of arguments (name, value pairs)")
+    fields = []
+    for i in range(0, len(args), 2):
+        name = args[i]
+        value = args[i + 1]
+        if not isinstance(name, str):
+            raise TypeError(f"named_struct field names must be strings, got {type(name)}")
+        e = _str_to_col(value) if not isinstance(value, Expr) else value
+        fields.append(e.alias(name))
+    return polars_functions.struct(fields)
