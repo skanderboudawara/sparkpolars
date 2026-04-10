@@ -81,13 +81,11 @@ force-exclude = '''
 [tool.coverage.run]
 source = ["src"]
 omit = [
-    "*/__init__.py", 
-    "*/test_*", 
-    "*/_exceptions.py", 
-    "*/_logger.py", 
-    "*/_version.py", 
-    "*/polyspark/*",
-    "src/sparkpolars/polyspark/*"
+    "*/__init__.py",
+    "*/test_*",
+    "*/_exceptions.py",
+    "*/_logger.py",
+    "*/_version.py",
 ]
 
 [tool.coverage.report]
@@ -97,16 +95,16 @@ exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
 fail_under = 100
 
 [tool.pytest.ini_options]
-addopts = ["--doctest-modules", "-vv", "-p", "no:warnings", "--tb=short"]
+addopts = ["--doctest-modules", "-p", "no:warnings", "--tb=short"]
 
 pythonpath = ["src"]
 testpaths = ["tests", "src"]
 xfail_strict = true
 filterwarnings = ["error"]
 python_files = "test_*.py"
-log_cli = true
+log_cli = false
 log_cli_level = "INFO"
-log_level = "INFO"
+log_level = "WARN"
 log_format = "%(asctime)s %(levelname)s %(name)s %(message)s"
 log_date_format = "%Y-%m-%d %H:%M:%S"
 

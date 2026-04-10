@@ -15,20 +15,16 @@ from zoneinfo import ZoneInfo
 
 @pytest.fixture(scope="session")
 def spark_session():
-    spark = SparkSession.builder \
+    return SparkSession.builder \
         .master("local[1]") \
         .appName("pytest") \
         .config("spark.sql.timezone", "UTC") \
         .config("spark.sql.session.timeZone", "UTC") \
         .config("spark.ui.enabled", "false") \
         .config("spark.sql.shuffle.partitions", "1") \
-        .config("spark.default.parallelism", "1") \
-        .config("spark.driver.host", "localhost") \
         .getOrCreate()
 
-    yield spark
-    spark.stop()
-    
+
 @pytest.fixture()
 def spark_data():
     data =  [

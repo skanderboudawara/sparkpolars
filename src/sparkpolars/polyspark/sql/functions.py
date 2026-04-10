@@ -42,10 +42,10 @@ def trim(col: str | Expr, trim_chars: str | None = None) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["  hi  "]})
-        >>> df.select(sf.trim(pl.col("s")))["s"][0]
+        >>> df.select(sf.trim(pl.col("s")))["trim(s)"][0]
         'hi'
     """
-    return _str_to_col(col).trim(trim_chars)
+    return _str_to_col(col).trim(trim_chars).alias(f"trim({_col_name(col)})")
 
 
 def when(condition: Expr, value: Any) -> SparkWhen:
@@ -103,10 +103,10 @@ def upper(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello"]})
-        >>> df.select(sf.upper(pl.col("s")))["s"][0]
+        >>> df.select(sf.upper(pl.col("s")))["upper(s)"][0]
         'HELLO'
     """
-    return _str_to_col(col).upper()
+    return _str_to_col(col).upper().alias(f"upper({_col_name(col)})")
 
 
 ucase = upper
@@ -119,10 +119,10 @@ def lower(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["HELLO"]})
-        >>> df.select(sf.lower(pl.col("s")))["s"][0]
+        >>> df.select(sf.lower(pl.col("s")))["lower(s)"][0]
         'hello'
     """
-    return _str_to_col(col).lower()
+    return _str_to_col(col).lower().alias(f"lower({_col_name(col)})")
 
 
 lcase = lower
@@ -135,10 +135,10 @@ def regexp_count(col: str | Expr, pattern: str) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello"]})
-        >>> df.select(sf.regexp_count(pl.col("s"), "l"))["s"][0]
+        >>> df.select(sf.regexp_count(pl.col("s"), "l"))["regexp_count(s, l)"][0]
         2
     """
-    return _str_to_col(col).regexp_count(pattern)
+    return _str_to_col(col).regexp_count(pattern).alias(f"regexp_count({_col_name(col)}, {pattern})")
 
 
 def regexp_extract(col: str | Expr, pattern: str, idx: int) -> Expr:
@@ -148,10 +148,10 @@ def regexp_extract(col: str | Expr, pattern: str, idx: int) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["2023-01-15"]})
-        >>> df.select(sf.regexp_extract(pl.col("s"), r"(\\d{4})", 1))["s"][0]
+        >>> df.select(sf.regexp_extract(pl.col("s"), r"(\\d{4})", 1))["regexp_extract(s, (\\d{4}), 1)"][0]
         '2023'
     """
-    return _str_to_col(col).regexp_extract(pattern, idx)
+    return _str_to_col(col).regexp_extract(pattern, idx).alias(f"regexp_extract({_col_name(col)}, {pattern}, {idx})")
 
 
 def regexp_extract_all(col: str | Expr, pattern: str, idx: int | None = None) -> Expr:
@@ -161,13 +161,13 @@ def regexp_extract_all(col: str | Expr, pattern: str, idx: int | None = None) ->
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello world"]})
-        >>> df.select(sf.regexp_extract_all(pl.col("s"), r"\\w+"))["s"][0].to_list()
+        >>> df.select(sf.regexp_extract_all(pl.col("s"), r"\\w+"))["regexp_extract_all(s, \\w+)"][0].to_list()
         ['hello', 'world']
     """
     if idx is not None:
         msg = "idx parameter is not supported in Polars for regexp_extract_all"
         raise NotImplementedError(msg)
-    return _str_to_col(col).regexp_extract_all(pattern)
+    return _str_to_col(col).regexp_extract_all(pattern).alias(f"regexp_extract_all({_col_name(col)}, {pattern})")
 
 
 def regexp_replace(col: str | Expr, pattern: str, replacement: str) -> Expr:
@@ -177,10 +177,10 @@ def regexp_replace(col: str | Expr, pattern: str, replacement: str) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello"]})
-        >>> df.select(sf.regexp_replace(pl.col("s"), "l", "r"))["s"][0]
+        >>> df.select(sf.regexp_replace(pl.col("s"), "l", "r"))["regexp_replace(s, l, r)"][0]
         'herlo'
     """
-    return _str_to_col(col).regexp_replace(pattern, replacement)
+    return _str_to_col(col).regexp_replace(pattern, replacement).alias(f"regexp_replace({_col_name(col)}, {pattern}, {replacement})")
 
 
 def replace(col: str | Expr, search: str, replacement: str | None = None) -> Expr:
@@ -190,12 +190,12 @@ def replace(col: str | Expr, search: str, replacement: str | None = None) -> Exp
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello"]})
-        >>> df.select(sf.replace(pl.col("s"), "l", "r"))["s"][0]
+        >>> df.select(sf.replace(pl.col("s"), "l", "r"))["replace(s, l, r)"][0]
         'herlo'
-        >>> df.select(sf.replace(pl.col("s"), "l"))["s"][0]
+        >>> df.select(sf.replace(pl.col("s"), "l"))["replace(s, l, None)"][0]
         'heo'
     """
-    return _str_to_col(col).str_replace(search, replacement)
+    return _str_to_col(col).str_replace(search, replacement).alias(f"replace({_col_name(col)}, {search}, {replacement})")
 
 
 def rtrim(col: str | Expr, trim_chars: str | None = None) -> Expr:
@@ -205,10 +205,10 @@ def rtrim(col: str | Expr, trim_chars: str | None = None) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["  hi  "]})
-        >>> df.select(sf.rtrim(pl.col("s")))["s"][0]
+        >>> df.select(sf.rtrim(pl.col("s")))["rtrim(s)"][0]
         '  hi'
     """
-    return _str_to_col(col).rtrim(trim_chars)
+    return _str_to_col(col).rtrim(trim_chars).alias(f"rtrim({_col_name(col)})")
 
 
 def ltrim(col: str | Expr, trim_chars: str | None = None) -> Expr:
@@ -218,10 +218,10 @@ def ltrim(col: str | Expr, trim_chars: str | None = None) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["  hi  "]})
-        >>> df.select(sf.ltrim(pl.col("s")))["s"][0]
+        >>> df.select(sf.ltrim(pl.col("s")))["ltrim(s)"][0]
         'hi  '
     """
-    return _str_to_col(col).ltrim(trim_chars)
+    return _str_to_col(col).ltrim(trim_chars).alias(f"ltrim({_col_name(col)})")
 
 
 def rpad(col: str | Expr, length: int, pad: str = " ") -> Expr:
@@ -231,10 +231,10 @@ def rpad(col: str | Expr, length: int, pad: str = " ") -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hi"]})
-        >>> df.select(sf.rpad(pl.col("s"), 5, "0"))["s"][0]
+        >>> df.select(sf.rpad(pl.col("s"), 5, "0"))["rpad(s, 5, 0)"][0]
         'hi000'
     """
-    return _str_to_col(col).rpad(length, pad)
+    return _str_to_col(col).rpad(length, pad).alias(f"rpad({_col_name(col)}, {length}, {pad})")
 
 
 def lpad(col: str | Expr, length: int, pad: str = " ") -> Expr:
@@ -244,10 +244,10 @@ def lpad(col: str | Expr, length: int, pad: str = " ") -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hi"]})
-        >>> df.select(sf.lpad(pl.col("s"), 5, "0"))["s"][0]
+        >>> df.select(sf.lpad(pl.col("s"), 5, "0"))["lpad(s, 5, 0)"][0]
         '000hi'
     """
-    return _str_to_col(col).lpad(length, pad)
+    return _str_to_col(col).lpad(length, pad).alias(f"lpad({_col_name(col)}, {length}, {pad})")
 
 
 def base64(col: str | Expr) -> Expr:
@@ -257,10 +257,10 @@ def base64(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello"]})
-        >>> df.select(sf.base64(pl.col("s")))["s"][0]
+        >>> df.select(sf.base64(pl.col("s")))["base64(s)"][0]
         'aGVsbG8='
     """
-    return _str_to_col(col).base64()
+    return _str_to_col(col).base64().alias(f"base64({_col_name(col)})")
 
 
 def btrim(col: str | Expr, trim_chars: str | None = None) -> Expr:
@@ -270,10 +270,10 @@ def btrim(col: str | Expr, trim_chars: str | None = None) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["  hi  "]})
-        >>> df.select(sf.btrim(pl.col("s")))["s"][0]
+        >>> df.select(sf.btrim(pl.col("s")))["btrim(s)"][0]
         'hi'
     """
-    return _str_to_col(col).btrim(trim_chars)
+    return _str_to_col(col).btrim(trim_chars).alias(f"btrim({_col_name(col)})")
 
 
 def contains(col: str | Expr, substr: str) -> Expr:
@@ -286,7 +286,7 @@ def contains(col: str | Expr, substr: str) -> Expr:
         >>> df.filter(sf.contains(pl.col("s"), "world")).height
         1
     """
-    return _str_to_col(col).contains(substr)
+    return _str_to_col(col).contains(substr).alias(f"contains({_col_name(col)}, {substr})")
 
 
 def encode(col: str | Expr, charset: str) -> Expr:
@@ -296,10 +296,10 @@ def encode(col: str | Expr, charset: str) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello"]})
-        >>> df.select(sf.encode(pl.col("s"), "hex"))["s"][0]
+        >>> df.select(sf.encode(pl.col("s"), "hex"))["encode(s, hex)"][0]
         '68656c6c6f'
     """
-    return _str_to_col(col).encode(charset)
+    return _str_to_col(col).encode(charset).alias(f"encode({_col_name(col)}, {charset})")
 
 
 def decode(col: str | Expr, charset: str) -> Expr:
@@ -309,10 +309,10 @@ def decode(col: str | Expr, charset: str) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["68656c6c6f"]})
-        >>> df.select(sf.decode(pl.col("s"), "hex"))["s"][0]
+        >>> df.select(sf.decode(pl.col("s"), "hex"))["decode(s, hex)"][0]
         b'hello'
     """
-    return _str_to_col(col).decode(charset)
+    return _str_to_col(col).decode(charset).alias(f"decode({_col_name(col)}, {charset})")
 
 
 def left(col: str | Expr, n: int) -> Expr:
@@ -322,10 +322,10 @@ def left(col: str | Expr, n: int) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello"]})
-        >>> df.select(sf.left(pl.col("s"), 3))["s"][0]
+        >>> df.select(sf.left(pl.col("s"), 3))["left(s, 3)"][0]
         'hel'
     """
-    return _str_to_col(col).left(n)
+    return _str_to_col(col).left(n).alias(f"left({_col_name(col)}, {n})")
 
 
 def right(col: str | Expr, n: int) -> Expr:
@@ -335,10 +335,10 @@ def right(col: str | Expr, n: int) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello"]})
-        >>> df.select(sf.right(pl.col("s"), 3))["s"][0]
+        >>> df.select(sf.right(pl.col("s"), 3))["right(s, 3)"][0]
         'llo'
     """
-    return _str_to_col(col).right(n)
+    return _str_to_col(col).right(n).alias(f"right({_col_name(col)}, {n})")
 
 
 def length(col: str | Expr) -> Expr:
@@ -348,10 +348,10 @@ def length(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello"]})
-        >>> df.select(sf.length(pl.col("s")))["s"][0]
+        >>> df.select(sf.length(pl.col("s")))["length(s)"][0]
         5
     """
-    return _str_to_col(col).length()
+    return _str_to_col(col).length().alias(f"length({_col_name(col)})")
 
 
 def locate(substr: str, col: str | Expr, _pos: int | None = None) -> Expr:
@@ -361,10 +361,10 @@ def locate(substr: str, col: str | Expr, _pos: int | None = None) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello"]})
-        >>> df.select(sf.locate("ll", pl.col("s")))["s"][0]
+        >>> df.select(sf.locate("ll", pl.col("s")))["locate(ll, s, 1)"][0]
         2
     """
-    return _str_to_col(col).locate(substr)
+    return _str_to_col(col).locate(substr).alias(f"locate({substr}, {_col_name(col)}, 1)")
 
 
 position = locate
@@ -377,10 +377,10 @@ def repeat(col: str | Expr, n: int) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["ab"]})
-        >>> df.select(sf.repeat(pl.col("s"), 3))["s"][0]
+        >>> df.select(sf.repeat(pl.col("s"), 3))["repeat(s, 3)"][0]
         'ababab'
     """
-    return _str_to_col(col).repeat(n)
+    return _str_to_col(col).repeat(n).alias(f"repeat({_col_name(col)}, {n})")
 
 
 def concat(*cols: str | Expr) -> Expr:
@@ -403,10 +403,10 @@ def round(col: str | Expr, scale: int = 0) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [1.567]})
-        >>> df.select(sf.round(pl.col("x"), 1))["x"][0]
+        >>> df.select(sf.round(pl.col("x"), 1))["round(x, 1)"][0]
         1.6
     """
-    return col.round(scale)
+    return _str_to_col(col).round(scale).alias(f"round({_col_name(col)}, {scale})")
 
 
 def sqrt(col: str | Expr) -> Expr:
@@ -416,10 +416,10 @@ def sqrt(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [9.0]})
-        >>> df.select(sf.sqrt(pl.col("x")))["x"][0]
+        >>> df.select(sf.sqrt(pl.col("x")))["SQRT(x)"][0]
         3.0
     """
-    return col.sqrt()
+    return _str_to_col(col).sqrt().alias(f"SQRT({_col_name(col)})")
 
 
 def pow(col: str | Expr, exponent: int | float) -> Expr:
@@ -429,10 +429,10 @@ def pow(col: str | Expr, exponent: int | float) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [2.0]})
-        >>> df.select(sf.pow(pl.col("x"), 3))["x"][0]
+        >>> df.select(sf.pow(pl.col("x"), 3))["POWER(x, 3)"][0]
         8.0
     """
-    return col.pow(exponent)
+    return _str_to_col(col).pow(exponent).alias(f"POWER({_col_name(col)}, {exponent})")
 
 
 power = pow
@@ -445,10 +445,10 @@ def negate(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [1, -2, 3]})
-        >>> df.select(sf.negate(pl.col("x")))["x"].to_list()
+        >>> df.select(sf.negate(pl.col("x")))["negative(x)"].to_list()
         [-1, 2, -3]
     """
-    return _str_to_col(col).negate()
+    return _str_to_col(col).negate().alias(f"negative({_col_name(col)})")
 
 
 negative = negate
@@ -461,10 +461,10 @@ def translate(col: str | Expr, matching: str, replace: str) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["abc"]})
-        >>> df.select(sf.translate(pl.col("s"), "abc", "xyz"))["s"][0]
+        >>> df.select(sf.translate(pl.col("s"), "abc", "xyz"))["translate(s, abc, xyz)"][0]
         'xyz'
     """
-    return _str_to_col(col).translate(matching, replace)
+    return _str_to_col(col).translate(matching, replace).alias(f"translate({_col_name(col)}, {matching}, {replace})")
 
 
 def collect_list(col: str | Expr) -> Expr:
@@ -474,10 +474,10 @@ def collect_list(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [1, 2, 3]})
-        >>> df.select(sf.collect_list(pl.col("x")))["x"][0].to_list()
+        >>> df.select(sf.collect_list(pl.col("x")))["collect_list(x)"][0].to_list()
         [1, 2, 3]
     """
-    return _str_to_col(col).collect_list()
+    return _str_to_col(col).collect_list().alias(f"collect_list({_col_name(col)})")
 
 
 array_agg = collect_list
@@ -491,10 +491,10 @@ def collect_set(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [1, 2, 2, 3]})
-        >>> sorted(df.select(sf.collect_set(pl.col("x")))["x"][0].to_list())
+        >>> sorted(df.select(sf.collect_set(pl.col("x")))["collect_set(x)"][0].to_list())
         [1, 2, 3]
     """
-    return _str_to_col(col).collect_set()
+    return _str_to_col(col).collect_set().alias(f"collect_set({_col_name(col)})")
 
 
 array_agg_distinct = collect_set
@@ -557,10 +557,10 @@ def abs(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [-1, 2, -3]})
-        >>> df.select(sf.abs(pl.col("x")))["x"].to_list()
+        >>> df.select(sf.abs(pl.col("x")))["abs(x)"].to_list()
         [1, 2, 3]
     """
-    return _str_to_col(col).abs()
+    return _str_to_col(col).abs().alias(f"abs({_col_name(col)})")
 
 
 def avg(col: str | Expr) -> Expr:
@@ -619,10 +619,10 @@ def array_distinct(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, 2, 2, 3]]})
-        >>> sorted(df.select(sf.array_distinct(pl.col("a")))["a"][0].to_list())
+        >>> sorted(df.select(sf.array_distinct(pl.col("a")))["array_distinct(a)"][0].to_list())
         [1, 2, 3]
     """
-    return _str_to_col(col).array_distinct()
+    return _str_to_col(col).array_distinct().alias(f"array_distinct({_col_name(col)})")
 
 
 def greatest(*cols: str | Expr) -> Expr:
@@ -632,11 +632,12 @@ def greatest(*cols: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [1, 5], "b": [3, 2]})
-        >>> df.select(sf.greatest(pl.col("a"), pl.col("b")))["a"].to_list()
+        >>> df.select(sf.greatest(pl.col("a"), pl.col("b")))["greatest(a, b)"].to_list()
         [3, 5]
     """
+    col_names = [_col_name(c) for c in cols]
     cols = [_str_to_col(col) for col in cols]
-    return polars_functions.max_horizontal(*cols)
+    return polars_functions.max_horizontal(*cols).alias(f"greatest({', '.join(col_names)})")
 
 
 def least(*cols: str | Expr) -> Expr:
@@ -646,11 +647,12 @@ def least(*cols: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [1, 5], "b": [3, 2]})
-        >>> df.select(sf.least(pl.col("a"), pl.col("b")))["a"].to_list()
+        >>> df.select(sf.least(pl.col("a"), pl.col("b")))["least(a, b)"].to_list()
         [1, 2]
     """
+    col_names = [_col_name(c) for c in cols]
     cols = [_str_to_col(col) for col in cols]
-    return polars_functions.min_horizontal(*cols)
+    return polars_functions.min_horizontal(*cols).alias(f"least({', '.join(col_names)})")
 
 
 # Sort-direction standalone helpers — used by orderBy/_desc_status logic in dataframe.py.
@@ -688,10 +690,10 @@ def array_append(col: str | Expr, value: Any) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, 2]]})
-        >>> df.select(sf.array_append(pl.col("a"), 3))["a"][0].to_list()
+        >>> df.select(sf.array_append(pl.col("a"), 3))["array_append(a, 3)"][0].to_list()
         [1, 2, 3]
     """
-    return _str_to_col(col).array_append(value)
+    return _str_to_col(col).array_append(value).alias(f"array_append({_col_name(col)}, {value})")
 
 
 def array_compact(col: str | Expr) -> Expr:
@@ -701,10 +703,10 @@ def array_compact(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, None, 2]]})
-        >>> df.select(sf.array_compact(pl.col("a")))["a"][0].to_list()
+        >>> df.select(sf.array_compact(pl.col("a")))["array_compact(a)"][0].to_list()
         [1, 2]
     """
-    return _str_to_col(col).array_compact()
+    return _str_to_col(col).array_compact().alias(f"array_compact({_col_name(col)})")
 
 
 def array_contains(col: str | Expr, value: Any) -> Expr:
@@ -714,10 +716,10 @@ def array_contains(col: str | Expr, value: Any) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, 2, 3]]})
-        >>> df.select(sf.array_contains(pl.col("a"), 2))["a"][0]
+        >>> df.select(sf.array_contains(pl.col("a"), 2))["array_contains(a, 2)"][0]
         True
     """
-    return _str_to_col(col).array_contains(value)
+    return _str_to_col(col).array_contains(value).alias(f"array_contains({_col_name(col)}, {value})")
 
 
 def array_except(col1: str | Expr, col2: str | Expr) -> Expr:
@@ -727,10 +729,10 @@ def array_except(col1: str | Expr, col2: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, 2, 3]], "b": [[2, 3]]})
-        >>> df.select(sf.array_except(pl.col("a"), pl.col("b")))["a"][0].to_list()
+        >>> df.select(sf.array_except(pl.col("a"), pl.col("b")))["array_except(a, b)"][0].to_list()
         [1]
     """
-    return _str_to_col(col1).array_except(_str_to_col(col2))
+    return _str_to_col(col1).array_except(_str_to_col(col2)).alias(f"array_except({_col_name(col1)}, {_col_name(col2)})")
 
 
 def array_intersect(col1: str | Expr, col2: str | Expr) -> Expr:
@@ -740,10 +742,10 @@ def array_intersect(col1: str | Expr, col2: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, 2, 3]], "b": [[2, 3, 4]]})
-        >>> sorted(df.select(sf.array_intersect(pl.col("a"), pl.col("b")))["a"][0].to_list())
+        >>> sorted(df.select(sf.array_intersect(pl.col("a"), pl.col("b")))["array_intersect(a, b)"][0].to_list())
         [2, 3]
     """
-    return _str_to_col(col1).array_intersect(_str_to_col(col2))
+    return _str_to_col(col1).array_intersect(_str_to_col(col2)).alias(f"array_intersect({_col_name(col1)}, {_col_name(col2)})")
 
 
 def array_join(col: str | Expr, delimiter: str, null_replacement: str | None = None) -> Expr:
@@ -753,10 +755,10 @@ def array_join(col: str | Expr, delimiter: str, null_replacement: str | None = N
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [["a", "b", "c"]]})
-        >>> df.select(sf.array_join(pl.col("a"), ","))["a"][0]
+        >>> df.select(sf.array_join(pl.col("a"), ","))["array_join(a, ,, None)"][0]
         'a,b,c'
     """
-    return _str_to_col(col).array_join(delimiter, null_replacement)
+    return _str_to_col(col).array_join(delimiter, null_replacement).alias(f"array_join({_col_name(col)}, {delimiter}, {null_replacement})")
 
 
 def array_max(col: str | Expr) -> Expr:
@@ -766,10 +768,10 @@ def array_max(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, 3, 2]]})
-        >>> df.select(sf.array_max(pl.col("a")))["a"][0]
+        >>> df.select(sf.array_max(pl.col("a")))["array_max(a)"][0]
         3
     """
-    return _str_to_col(col).array_max()
+    return _str_to_col(col).array_max().alias(f"array_max({_col_name(col)})")
 
 
 def array_min(col: str | Expr) -> Expr:
@@ -779,10 +781,10 @@ def array_min(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, 3, 2]]})
-        >>> df.select(sf.array_min(pl.col("a")))["a"][0]
+        >>> df.select(sf.array_min(pl.col("a")))["array_min(a)"][0]
         1
     """
-    return _str_to_col(col).array_min()
+    return _str_to_col(col).array_min().alias(f"array_min({_col_name(col)})")
 
 
 def array_size(col: str | Expr) -> Expr:
@@ -792,10 +794,10 @@ def array_size(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, 2, 3]]})
-        >>> df.select(sf.array_size(pl.col("a")))["a"][0]
+        >>> df.select(sf.array_size(pl.col("a")))["array_size(a)"][0]
         3
     """
-    return _str_to_col(col).array_size()
+    return _str_to_col(col).array_size().alias(f"array_size({_col_name(col)})")
 
 
 size = array_size
@@ -808,10 +810,10 @@ def array_union(col1: str | Expr, col2: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, 2, 3]], "b": [[2, 3, 4]]})
-        >>> sorted(df.select(sf.array_union(pl.col("a"), pl.col("b")))["a"][0].to_list())
+        >>> sorted(df.select(sf.array_union(pl.col("a"), pl.col("b")))["array_union(a, b)"][0].to_list())
         [1, 2, 3, 4]
     """
-    return _str_to_col(col1).array_union(_str_to_col(col2))
+    return _str_to_col(col1).array_union(_str_to_col(col2)).alias(f"array_union({_col_name(col1)}, {_col_name(col2)})")
 
 
 def array_sort(col: str | Expr, comparator: Any = None) -> Expr:
@@ -821,13 +823,13 @@ def array_sort(col: str | Expr, comparator: Any = None) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[3, 1, 2]]})
-        >>> df.select(sf.array_sort(pl.col("a")))["a"][0].to_list()
+        >>> df.select(sf.array_sort(pl.col("a")))["array_sort(a, true)"][0].to_list()
         [1, 2, 3]
     """
     if comparator is not None:
         msg = "Custom comparator for array_sort is not supported in Polars."
         raise NotImplementedError(msg)
-    return _str_to_col(col).array_sort(asc=True)
+    return _str_to_col(col).array_sort(asc=True).alias(f"array_sort({_col_name(col)}, true)")
 
 
 def sort_array(col: str | Expr, asc: bool = True) -> Expr:
@@ -837,10 +839,10 @@ def sort_array(col: str | Expr, asc: bool = True) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[3, 1, 2]]})
-        >>> df.select(sf.sort_array(pl.col("a"), asc=False))["a"][0].to_list()
+        >>> df.select(sf.sort_array(pl.col("a"), asc=False))["sort_array(a, False)"][0].to_list()
         [3, 2, 1]
     """
-    return _str_to_col(col).array_sort(asc=asc)
+    return _str_to_col(col).array_sort(asc=asc).alias(f"sort_array({_col_name(col)}, {asc})")
 
 
 def slice(col: str | Expr, start: int, length: int | None = None) -> Expr:
@@ -850,10 +852,10 @@ def slice(col: str | Expr, start: int, length: int | None = None) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, 2, 3, 4]]})
-        >>> df.select(sf.slice(pl.col("a"), 2, 2))["a"][0].to_list()
+        >>> df.select(sf.slice(pl.col("a"), 2, 2))["slice(a, 2, 2)"][0].to_list()
         [2, 3]
     """
-    return _str_to_col(col).array_slice(start, length)
+    return _str_to_col(col).array_slice(start, length).alias(f"slice({_col_name(col)}, {start}, {length})")
 
 
 def array_remove(col: str | Expr, element: Any) -> Expr:
@@ -863,10 +865,10 @@ def array_remove(col: str | Expr, element: Any) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, 2, 1, 3]]})
-        >>> df.select(sf.array_remove(pl.col("a"), 1))["a"][0].to_list()
+        >>> df.select(sf.array_remove(pl.col("a"), 1))["array_remove(a, 1)"][0].to_list()
         [2, 3]
     """
-    return _str_to_col(col).array_remove(element)
+    return _str_to_col(col).array_remove(element).alias(f"array_remove({_col_name(col)}, {element})")
 
 
 def flatten(col: str | Expr) -> Expr:
@@ -876,12 +878,12 @@ def flatten(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, 2, 3]]})
-        >>> df.select(sf.flatten(pl.col("a")))["a"].to_list()
+        >>> df.select(sf.flatten(pl.col("a")))["flatten(a)"].to_list()
         [1, 2, 3]
     """
     # Native Expr.flatten() flattens List[List[T]] → List[T] per row
     c = _str_to_col(col)
-    return c.flatten()
+    return c.flatten().alias(f"flatten({_col_name(col)})")
 
 
 def split(col: str | Expr, pattern: str, limit: int = -1) -> Expr:
@@ -891,10 +893,10 @@ def split(col: str | Expr, pattern: str, limit: int = -1) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["a,b,c"]})
-        >>> df.select(sf.split(pl.col("s"), ","))["s"][0].to_list()
+        >>> df.select(sf.split(pl.col("s"), ","))["split(s, ,, -1)"][0].to_list()
         ['a', 'b', 'c']
     """
-    return _str_to_col(col).split(pattern, limit)
+    return _str_to_col(col).split(pattern, limit).alias(f"split({_col_name(col)}, {pattern}, {limit})")
 
 
 def explode(col: str | Expr) -> Expr:
@@ -972,10 +974,10 @@ def product(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [2, 3, 4]})
-        >>> df.select(sf.product(pl.col("x")))["x"][0]
+        >>> df.select(sf.product(pl.col("x")))["product(x)"][0]
         24
     """
-    return _str_to_col(col).product()
+    return _str_to_col(col).product().alias(f"product({_col_name(col)})")
 
 
 def year(col: str | Expr) -> Expr:
@@ -986,10 +988,10 @@ def year(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"d": [datetime.date(2023, 1, 16)]})
-        >>> df.select(sf.year(pl.col("d")))["d"][0]
+        >>> df.select(sf.year(pl.col("d")))["year(d)"][0]
         2023
     """
-    return _str_to_col(col).year()
+    return _str_to_col(col).year().alias(f"year({_col_name(col)})")
 
 
 def month(col: str | Expr) -> Expr:
@@ -1000,10 +1002,10 @@ def month(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"d": [datetime.date(2023, 1, 16)]})
-        >>> df.select(sf.month(pl.col("d")))["d"][0]
+        >>> df.select(sf.month(pl.col("d")))["month(d)"][0]
         1
     """
-    return _str_to_col(col).month()
+    return _str_to_col(col).month().alias(f"month({_col_name(col)})")
 
 
 def hour(col: str | Expr) -> Expr:
@@ -1014,10 +1016,10 @@ def hour(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"t": [datetime.datetime(2023, 1, 16, 14, 30, 0)]})
-        >>> df.select(sf.hour(pl.col("t")))["t"][0]
+        >>> df.select(sf.hour(pl.col("t")))["hour(t)"][0]
         14
     """
-    return _str_to_col(col).hour()
+    return _str_to_col(col).hour().alias(f"hour({_col_name(col)})")
 
 
 def last_day(col: str | Expr) -> Expr:
@@ -1028,10 +1030,10 @@ def last_day(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"d": [datetime.date(2023, 1, 16)]})
-        >>> df.select(sf.last_day(pl.col("d")))["d"][0]
+        >>> df.select(sf.last_day(pl.col("d")))["last_day(d)"][0]
         datetime.date(2023, 1, 31)
     """
-    return _str_to_col(col).last_day()
+    return _str_to_col(col).last_day().alias(f"last_day({_col_name(col)})")
 
 
 def dayofmonth(col: str | Expr) -> Expr:
@@ -1042,10 +1044,10 @@ def dayofmonth(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"d": [datetime.date(2023, 1, 16)]})
-        >>> df.select(sf.dayofmonth(pl.col("d")))["d"][0]
+        >>> df.select(sf.dayofmonth(pl.col("d")))["dayofmonth(d)"][0]
         16
     """
-    return _str_to_col(col).dayofmonth()
+    return _str_to_col(col).dayofmonth().alias(f"dayofmonth({_col_name(col)})")
 
 
 def dayofweek(col: str | Expr) -> Expr:
@@ -1056,10 +1058,10 @@ def dayofweek(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"d": [datetime.date(2023, 1, 16)]})
-        >>> df.select(sf.dayofweek(pl.col("d")))["d"][0]
+        >>> df.select(sf.dayofweek(pl.col("d")))["dayofweek(d)"][0]
         2
     """
-    return _str_to_col(col).dayofweek()
+    return _str_to_col(col).dayofweek().alias(f"dayofweek({_col_name(col)})")
 
 
 def dayofyear(col: str | Expr) -> Expr:
@@ -1070,10 +1072,10 @@ def dayofyear(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"d": [datetime.date(2023, 1, 16)]})
-        >>> df.select(sf.dayofyear(pl.col("d")))["d"][0]
+        >>> df.select(sf.dayofyear(pl.col("d")))["dayofyear(d)"][0]
         16
     """
-    return _str_to_col(col).dayofyear()
+    return _str_to_col(col).dayofyear().alias(f"dayofyear({_col_name(col)})")
 
 
 def current_date() -> Expr:
@@ -1117,10 +1119,10 @@ def date_sub(col: str | Expr, days: int) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"d": [datetime.date(2023, 1, 16)]})
-        >>> df.select(sf.date_sub(pl.col("d"), 5))["d"][0]
+        >>> df.select(sf.date_sub(pl.col("d"), 5))["date_sub(d, 5)"][0]
         datetime.date(2023, 1, 11)
     """
-    return _str_to_col(col).date_sub(days)
+    return _str_to_col(col).date_sub(days).alias(f"date_sub({_col_name(col)}, {days})")
 
 
 def date_add(col: str | Expr, days: int) -> Expr:
@@ -1131,10 +1133,10 @@ def date_add(col: str | Expr, days: int) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"d": [datetime.date(2023, 1, 16)]})
-        >>> df.select(sf.date_add(pl.col("d"), 5))["d"][0]
+        >>> df.select(sf.date_add(pl.col("d"), 5))["date_add(d, 5)"][0]
         datetime.date(2023, 1, 21)
     """
-    return _str_to_col(col).date_add(days)
+    return _str_to_col(col).date_add(days).alias(f"date_add({_col_name(col)}, {days})")
 
 
 def datediff(end: str | Expr, start: str | Expr) -> Expr:
@@ -1161,10 +1163,10 @@ def add_months(col: str | Expr, months: int) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"d": [datetime.date(2023, 1, 16)]})
-        >>> df.select(sf.add_months(pl.col("d"), 2))["d"][0]
+        >>> df.select(sf.add_months(pl.col("d"), 2))["add_months(d, 2)"][0]
         datetime.date(2023, 3, 16)
     """
-    return _str_to_col(col).add_months(months)
+    return _str_to_col(col).add_months(months).alias(f"add_months({_col_name(col)}, {months})")
 
 
 def sequence(start: int | Expr, stop: int | Expr, step: int | None = None) -> Expr:
@@ -1207,10 +1209,10 @@ def md5(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import hashlib
         >>> df = pl.DataFrame({"s": ["hello"]})
-        >>> df.select(sf.md5(pl.col("s")))["s"][0] == hashlib.md5(b"hello").hexdigest()
+        >>> df.select(sf.md5(pl.col("s")))["md5(s)"][0] == hashlib.md5(b"hello").hexdigest()
         True
     """
-    return _str_to_col(col).md5()
+    return _str_to_col(col).md5().alias(f"md5({_col_name(col)})")
 
 
 def sha1(col: str | Expr) -> Expr:
@@ -1221,10 +1223,10 @@ def sha1(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import hashlib
         >>> df = pl.DataFrame({"s": ["hello"]})
-        >>> df.select(sf.sha1(pl.col("s")))["s"][0] == hashlib.sha1(b"hello").hexdigest()
+        >>> df.select(sf.sha1(pl.col("s")))["sha1(s)"][0] == hashlib.sha1(b"hello").hexdigest()
         True
     """
-    return _str_to_col(col).sha1()
+    return _str_to_col(col).sha1().alias(f"sha1({_col_name(col)})")
 
 
 def sha256(col: str | Expr) -> Expr:
@@ -1235,10 +1237,10 @@ def sha256(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import hashlib
         >>> df = pl.DataFrame({"s": ["hello"]})
-        >>> df.select(sf.sha256(pl.col("s")))["s"][0] == hashlib.sha256(b"hello").hexdigest()
+        >>> df.select(sf.sha256(pl.col("s")))["sha2(s, 256)"][0] == hashlib.sha256(b"hello").hexdigest()
         True
     """
-    return _str_to_col(col).sha256()
+    return _str_to_col(col).sha256().alias(f"sha2({_col_name(col)}, 256)")
 
 
 def transform(col: str | Expr, f: Callable) -> Expr:
@@ -1248,10 +1250,10 @@ def transform(col: str | Expr, f: Callable) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, 2, 3]]})
-        >>> df.select(sf.transform(pl.col("a"), lambda e: e * 2))["a"][0].to_list()
+        >>> df.select(sf.transform(pl.col("a"), lambda e: e * 2))["transform(a)"][0].to_list()
         [2, 4, 6]
     """
-    return _str_to_col(col).transform(f)
+    return _str_to_col(col).transform(f).alias(f"transform({_col_name(col)})")
 
 
 def filter(col: str | Expr, f: Callable) -> Expr:
@@ -1261,10 +1263,10 @@ def filter(col: str | Expr, f: Callable) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, 2, 3, 4]]})
-        >>> df.select(sf.filter(pl.col("a"), lambda e: e > 2))["a"][0].to_list()
+        >>> df.select(sf.filter(pl.col("a"), lambda e: e > 2))["filter(a)"][0].to_list()
         [3, 4]
     """
-    return _str_to_col(col).list_filter(f)
+    return _str_to_col(col).list_filter(f).alias(f"filter({_col_name(col)})")
 
 
 def forall(col: str | Expr, f: Callable) -> Expr:
@@ -1274,10 +1276,10 @@ def forall(col: str | Expr, f: Callable) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[2, 4, 6]]})
-        >>> df.select(sf.forall(pl.col("a"), lambda e: e > 0))["a"][0]
+        >>> df.select(sf.forall(pl.col("a"), lambda e: e > 0))["forall(a)"][0]
         True
     """
-    return _str_to_col(col).forall(f)
+    return _str_to_col(col).forall(f).alias(f"forall({_col_name(col)})")
 
 
 def reverse(col: str | Expr) -> Expr:
@@ -1287,10 +1289,10 @@ def reverse(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello"]})
-        >>> df.select(sf.reverse(pl.col("s")))["s"][0]
+        >>> df.select(sf.reverse(pl.col("s")))["reverse(s)"][0]
         'olleh'
     """
-    return _str_to_col(col).reverse()
+    return _str_to_col(col).reverse().alias(f"reverse({_col_name(col)})")
 
 
 # ── missing standalone aliases ────────────────────────────────────────────────
@@ -1302,10 +1304,10 @@ def substr(col: str | Expr, pos: int, length: int | None = None) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello"]})
-        >>> df.select(sf.substr(pl.col("s"), 2, 3))["s"][0]
+        >>> df.select(sf.substr(pl.col("s"), 2, 3))["substring(s, 2, 3)"][0]
         'ell'
     """
-    return _str_to_col(col).substr(pos, length)
+    return _str_to_col(col).substr(pos, length).alias(f"substring({_col_name(col)}, {pos}, {length})")
 
 
 substring = substr
@@ -1334,10 +1336,10 @@ def ceil(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [1.2, -1.9]})
-        >>> df.select(sf.ceil(pl.col("x")))["x"].to_list()
+        >>> df.select(sf.ceil(pl.col("x")))["CEIL(x)"].to_list()
         [2.0, -1.0]
     """
-    return _str_to_col(col).ceil()
+    return _str_to_col(col).ceil().alias(f"CEIL({_col_name(col)})")
 
 
 def floor(col: str | Expr) -> Expr:
@@ -1347,10 +1349,10 @@ def floor(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [1.9, -1.2]})
-        >>> df.select(sf.floor(pl.col("x")))["x"].to_list()
+        >>> df.select(sf.floor(pl.col("x")))["FLOOR(x)"].to_list()
         [1.0, -2.0]
     """
-    return _str_to_col(col).floor()
+    return _str_to_col(col).floor().alias(f"FLOOR({_col_name(col)})")
 
 
 def log(col: str | Expr, base: float = 2.718281828459045) -> Expr:
@@ -1361,10 +1363,10 @@ def log(col: str | Expr, base: float = 2.718281828459045) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import builtins
         >>> df = pl.DataFrame({"x": [1.0]})
-        >>> builtins.round(df.select(sf.log(pl.col("x")))["x"][0], 6)
+        >>> builtins.round(df.select(sf.log(pl.col("x")))["ln(x)"][0], 6)
         0.0
     """
-    return _str_to_col(col).log(base)
+    return _str_to_col(col).log(base).alias(f"ln({_col_name(col)})")
 
 
 def log2(col: str | Expr) -> Expr:
@@ -1374,10 +1376,10 @@ def log2(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [8.0]})
-        >>> df.select(sf.log2(pl.col("x")))["x"][0]
+        >>> df.select(sf.log2(pl.col("x")))["LOG2(x)"][0]
         3.0
     """
-    return _str_to_col(col).log(2.0)
+    return _str_to_col(col).log(2.0).alias(f"LOG2({_col_name(col)})")
 
 
 def log10(col: str | Expr) -> Expr:
@@ -1387,10 +1389,10 @@ def log10(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [100.0]})
-        >>> df.select(sf.log10(pl.col("x")))["x"][0]
+        >>> df.select(sf.log10(pl.col("x")))["LOG10(x)"][0]
         2.0
     """
-    return _str_to_col(col).log(10.0)
+    return _str_to_col(col).log(10.0).alias(f"LOG10({_col_name(col)})")
 
 
 def exp(col: str | Expr) -> Expr:
@@ -1400,10 +1402,10 @@ def exp(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [0.0]})
-        >>> df.select(sf.exp(pl.col("x")))["x"][0]
+        >>> df.select(sf.exp(pl.col("x")))["EXP(x)"][0]
         1.0
     """
-    return _str_to_col(col).exp()
+    return _str_to_col(col).exp().alias(f"EXP({_col_name(col)})")
 
 
 def signum(col: str | Expr) -> Expr:
@@ -1413,10 +1415,10 @@ def signum(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [3.0, -2.0, 0.0]})
-        >>> df.select(sf.signum(pl.col("x")))["x"].to_list()
+        >>> df.select(sf.signum(pl.col("x")))["SIGNUM(x)"].to_list()
         [1.0, -1.0, 0.0]
     """
-    return _str_to_col(col).sign()
+    return _str_to_col(col).sign().alias(f"SIGNUM({_col_name(col)})")
 
 
 sign = signum
@@ -1429,10 +1431,10 @@ def cbrt(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [27.0]})
-        >>> df.select(sf.cbrt(pl.col("x")))["x"][0]
+        >>> df.select(sf.cbrt(pl.col("x")))["CBRT(x)"][0]
         3.0
     """
-    return _str_to_col(col) ** (1.0 / 3.0)
+    return (_str_to_col(col) ** (1.0 / 3.0)).alias(f"CBRT({_col_name(col)})")
 
 
 # ── null-handling functions ───────────────────────────────────────────────────
@@ -1462,10 +1464,10 @@ def nullif(col: str | Expr, value: Any) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [1, 2, 3]})
-        >>> df.select(sf.nullif(pl.col("a"), 2))["a"].to_list()
+        >>> df.select(sf.nullif(pl.col("a"), 2))["nullif(a, 2)"].to_list()
         [1, None, 3]
     """
-    return _str_to_col(col).nullif(value)
+    return _str_to_col(col).nullif(value).alias(f"nullif({_col_name(col)}, {value})")
 
 
 # ── date / time functions ─────────────────────────────────────────────────────
@@ -1478,10 +1480,10 @@ def to_date(col: str | Expr, fmt: str = "%Y-%m-%d") -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"s": ["2023-06-15"]})
-        >>> df.select(sf.to_date(pl.col("s")))["s"][0]
+        >>> df.select(sf.to_date(pl.col("s")))["to_date(s)"][0]
         datetime.date(2023, 6, 15)
     """
-    return _str_to_col(col).str.to_date(fmt)
+    return _str_to_col(col).str.to_date(fmt).alias(f"to_date({_col_name(col)})")
 
 
 def to_timestamp(col: str | Expr, fmt: str = "%Y-%m-%d %H:%M:%S") -> Expr:
@@ -1492,10 +1494,10 @@ def to_timestamp(col: str | Expr, fmt: str = "%Y-%m-%d %H:%M:%S") -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"s": ["2023-06-15 10:30:00"]})
-        >>> df.select(sf.to_timestamp(pl.col("s")))["s"][0]
+        >>> df.select(sf.to_timestamp(pl.col("s")))["to_timestamp(s)"][0]
         datetime.datetime(2023, 6, 15, 10, 30)
     """
-    return _str_to_col(col).str.to_datetime(fmt)
+    return _str_to_col(col).str.to_datetime(fmt).alias(f"to_timestamp({_col_name(col)})")
 
 
 def date_format(col: str | Expr, fmt: str) -> Expr:
@@ -1506,10 +1508,10 @@ def date_format(col: str | Expr, fmt: str) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"d": [datetime.date(2023, 6, 15)]})
-        >>> df.select(sf.date_format(pl.col("d"), "%Y/%m/%d"))["d"][0]
+        >>> df.select(sf.date_format(pl.col("d"), "%Y/%m/%d"))["date_format(d, %Y/%m/%d)"][0]
         '2023/06/15'
     """
-    return _str_to_col(col).dt.strftime(fmt)
+    return _str_to_col(col).dt.strftime(fmt).alias(f"date_format({_col_name(col)}, {fmt})")
 
 
 def unix_timestamp(col: str | Expr) -> Expr:
@@ -1523,7 +1525,7 @@ def unix_timestamp(col: str | Expr) -> Expr:
         >>> df.select(sf.unix_timestamp(pl.col("t")))["t"][0] > 0
         True
     """
-    return _str_to_col(col).dt.epoch(time_unit="s")
+    return _str_to_col(col).dt.epoch(time_unit="s").alias(f"unix_timestamp({_col_name(col)})")
 
 
 def from_unixtime(col: str | Expr) -> Expr:
@@ -1533,10 +1535,10 @@ def from_unixtime(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"ts": [0]})
-        >>> df.select(sf.from_unixtime(pl.col("ts")))["ts"][0] is not None
+        >>> df.select(sf.from_unixtime(pl.col("ts")))["from_unixtime(ts)"][0] is not None
         True
     """
-    return polars_functions.from_epoch(_str_to_col(col), time_unit="s")
+    return polars_functions.from_epoch(_str_to_col(col), time_unit="s").alias(f"from_unixtime({_col_name(col)})")
 
 
 # ── string helper ─────────────────────────────────────────────────────────────
@@ -1564,16 +1566,16 @@ def array_position(col: str | Expr, value: Any) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[10, 20, 30]]})
-        >>> df.select(sf.array_position(pl.col("a"), 20))["a"][0]
+        >>> df.select(sf.array_position(pl.col("a"), 20))["array_position(a, 20)"][0]
         2
-        >>> df.select(sf.array_position(pl.col("a"), 99))["a"][0]
+        >>> df.select(sf.array_position(pl.col("a"), 99))["array_position(a, 99)"][0]
         0
     """
     c = _str_to_col(col)
     v = value if isinstance(value, Expr) else lit(value)
     # Polars list.eval gives 0-based index via arg_where; +1 for Spark compatibility
     idx = c.list.eval(pl.arg_where(pl.element() == v).first()).list.first()
-    return polars_functions.when(c.list.contains(v)).then(idx + 1).otherwise(lit(0))
+    return polars_functions.when(c.list.contains(v)).then(idx + 1).otherwise(lit(0)).alias(f"array_position({_col_name(col)}, {value})")
 
 
 def array_prepend(col: str | Expr, value: Any) -> Expr:
@@ -1583,10 +1585,10 @@ def array_prepend(col: str | Expr, value: Any) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[10, 20, 30]]})
-        >>> df.select(sf.array_prepend(pl.col("a"), 5))["a"][0].to_list()
+        >>> df.select(sf.array_prepend(pl.col("a"), 5))["array_prepend(a, 5)"][0].to_list()
         [5, 10, 20, 30]
     """
-    return _str_to_col(col).array_prepend(value)
+    return _str_to_col(col).array_prepend(value).alias(f"array_prepend({_col_name(col)}, {value})")
 
 
 # ── trig functions ────────────────────────────────────────────────────────────
@@ -1598,10 +1600,10 @@ def sin(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [0.0]})
-        >>> df.select(sf.sin(pl.col("x")))["x"][0]
+        >>> df.select(sf.sin(pl.col("x")))["SIN(x)"][0]
         0.0
     """
-    return _str_to_col(col).sin()
+    return _str_to_col(col).sin().alias(f"SIN({_col_name(col)})")
 
 
 def cos(col: str | Expr) -> Expr:
@@ -1611,10 +1613,10 @@ def cos(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [0.0]})
-        >>> df.select(sf.cos(pl.col("x")))["x"][0]
+        >>> df.select(sf.cos(pl.col("x")))["COS(x)"][0]
         1.0
     """
-    return _str_to_col(col).cos()
+    return _str_to_col(col).cos().alias(f"COS({_col_name(col)})")
 
 
 def tan(col: str | Expr) -> Expr:
@@ -1624,10 +1626,10 @@ def tan(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [0.0]})
-        >>> df.select(sf.tan(pl.col("x")))["x"][0]
+        >>> df.select(sf.tan(pl.col("x")))["TAN(x)"][0]
         0.0
     """
-    return _str_to_col(col).tan()
+    return _str_to_col(col).tan().alias(f"TAN({_col_name(col)})")
 
 
 def asin(col: str | Expr) -> Expr:
@@ -1637,10 +1639,10 @@ def asin(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [0.0]})
-        >>> df.select(sf.asin(pl.col("x")))["x"][0]
+        >>> df.select(sf.asin(pl.col("x")))["ASIN(x)"][0]
         0.0
     """
-    return _str_to_col(col).arcsin()
+    return _str_to_col(col).arcsin().alias(f"ASIN({_col_name(col)})")
 
 
 def acos(col: str | Expr) -> Expr:
@@ -1650,10 +1652,10 @@ def acos(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [1.0]})
-        >>> df.select(sf.acos(pl.col("x")))["x"][0]
+        >>> df.select(sf.acos(pl.col("x")))["ACOS(x)"][0]
         0.0
     """
-    return _str_to_col(col).arccos()
+    return _str_to_col(col).arccos().alias(f"ACOS({_col_name(col)})")
 
 
 def atan(col: str | Expr) -> Expr:
@@ -1663,10 +1665,10 @@ def atan(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [0.0]})
-        >>> df.select(sf.atan(pl.col("x")))["x"][0]
+        >>> df.select(sf.atan(pl.col("x")))["ATAN(x)"][0]
         0.0
     """
-    return _str_to_col(col).arctan()
+    return _str_to_col(col).arctan().alias(f"ATAN({_col_name(col)})")
 
 
 def atan2(y: str | Expr, x: str | Expr) -> Expr:
@@ -1686,7 +1688,7 @@ def atan2(y: str | Expr, x: str | Expr) -> Expr:
     return polars_functions.struct([y_expr.alias("_y"), x_expr.alias("_x")]).map_elements(
         lambda row: math.atan2(row["_y"], row["_x"]),
         return_dtype=polars_datatypes.Float64(),
-    )
+    ).alias(f"ATAN2({_col_name(y)}, {_col_name(x)})")
 
 
 def sinh(col: str | Expr) -> Expr:
@@ -1696,10 +1698,10 @@ def sinh(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [0.0]})
-        >>> df.select(sf.sinh(pl.col("x")))["x"][0]
+        >>> df.select(sf.sinh(pl.col("x")))["SINH(x)"][0]
         0.0
     """
-    return _str_to_col(col).sinh()
+    return _str_to_col(col).sinh().alias(f"SINH({_col_name(col)})")
 
 
 def cosh(col: str | Expr) -> Expr:
@@ -1709,10 +1711,10 @@ def cosh(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [0.0]})
-        >>> df.select(sf.cosh(pl.col("x")))["x"][0]
+        >>> df.select(sf.cosh(pl.col("x")))["COSH(x)"][0]
         1.0
     """
-    return _str_to_col(col).cosh()
+    return _str_to_col(col).cosh().alias(f"COSH({_col_name(col)})")
 
 
 def tanh(col: str | Expr) -> Expr:
@@ -1722,10 +1724,10 @@ def tanh(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [0.0]})
-        >>> df.select(sf.tanh(pl.col("x")))["x"][0]
+        >>> df.select(sf.tanh(pl.col("x")))["TANH(x)"][0]
         0.0
     """
-    return _str_to_col(col).tanh()
+    return _str_to_col(col).tanh().alias(f"TANH({_col_name(col)})")
 
 
 def asinh(col: str | Expr) -> Expr:
@@ -1735,10 +1737,10 @@ def asinh(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [0.0]})
-        >>> df.select(sf.asinh(pl.col("x")))["x"][0]
+        >>> df.select(sf.asinh(pl.col("x")))["ASINH(x)"][0]
         0.0
     """
-    return _str_to_col(col).arcsinh()
+    return _str_to_col(col).arcsinh().alias(f"ASINH({_col_name(col)})")
 
 
 def acosh(col: str | Expr) -> Expr:
@@ -1748,10 +1750,10 @@ def acosh(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [1.0]})
-        >>> df.select(sf.acosh(pl.col("x")))["x"][0]
+        >>> df.select(sf.acosh(pl.col("x")))["ACOSH(x)"][0]
         0.0
     """
-    return _str_to_col(col).arccosh()
+    return _str_to_col(col).arccosh().alias(f"ACOSH({_col_name(col)})")
 
 
 def atanh(col: str | Expr) -> Expr:
@@ -1761,10 +1763,10 @@ def atanh(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [0.0]})
-        >>> df.select(sf.atanh(pl.col("x")))["x"][0]
+        >>> df.select(sf.atanh(pl.col("x")))["ATANH(x)"][0]
         0.0
     """
-    return _str_to_col(col).arctanh()
+    return _str_to_col(col).arctanh().alias(f"ATANH({_col_name(col)})")
 
 
 def degrees(col: str | Expr) -> Expr:
@@ -1776,10 +1778,10 @@ def degrees(col: str | Expr) -> Expr:
         >>> import math
         >>> import builtins
         >>> df = pl.DataFrame({"x": [math.pi]})
-        >>> builtins.round(df.select(sf.degrees(pl.col("x")))["x"][0])
+        >>> builtins.round(df.select(sf.degrees(pl.col("x")))["DEGREES(x)"][0])
         180
     """
-    return _str_to_col(col).degrees()
+    return _str_to_col(col).degrees().alias(f"DEGREES({_col_name(col)})")
 
 
 def radians(col: str | Expr) -> Expr:
@@ -1790,10 +1792,10 @@ def radians(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import builtins
         >>> df = pl.DataFrame({"x": [180.0]})
-        >>> builtins.round(df.select(sf.radians(pl.col("x")))["x"][0], 4)
+        >>> builtins.round(df.select(sf.radians(pl.col("x")))["RADIANS(x)"][0], 4)
         3.1416
     """
-    return _str_to_col(col).radians()
+    return _str_to_col(col).radians().alias(f"RADIANS({_col_name(col)})")
 
 
 # ── string extras ─────────────────────────────────────────────────────────────
@@ -1805,10 +1807,10 @@ def initcap(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello world"]})
-        >>> df.select(sf.initcap(pl.col("s")))["s"][0]
+        >>> df.select(sf.initcap(pl.col("s")))["initcap(s)"][0]
         'Hello World'
     """
-    return _str_to_col(col).initcap()
+    return _str_to_col(col).initcap().alias(f"initcap({_col_name(col)})")
 
 
 def ascii(col: str | Expr) -> Expr:
@@ -1818,10 +1820,10 @@ def ascii(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["A"]})
-        >>> df.select(sf.ascii(pl.col("s")))["s"][0]
+        >>> df.select(sf.ascii(pl.col("s")))["ascii(s)"][0]
         65
     """
-    return _str_to_col(col).ascii_code()
+    return _str_to_col(col).ascii_code().alias(f"ascii({_col_name(col)})")
 
 
 def instr(col: str | Expr, substr: str) -> Expr:
@@ -1831,13 +1833,13 @@ def instr(col: str | Expr, substr: str) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello world"]})
-        >>> df.select(sf.instr(pl.col("s"), "world"))["s"][0]
+        >>> df.select(sf.instr(pl.col("s"), "world"))["instr(s, world)"][0]
         7
         >>> df2 = pl.DataFrame({"s": ["hello"]})
-        >>> df2.select(sf.instr(pl.col("s"), "xyz"))["s"][0]
+        >>> df2.select(sf.instr(pl.col("s"), "xyz"))["instr(s, xyz)"][0]
         0
     """
-    return _str_to_col(col).instr(substr)
+    return _str_to_col(col).instr(substr).alias(f"instr({_col_name(col)}, {substr})")
 
 
 def split_part(col: str | Expr, delimiter: str, part_num: int) -> Expr:
@@ -1847,10 +1849,10 @@ def split_part(col: str | Expr, delimiter: str, part_num: int) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["a,b,c"]})
-        >>> df.select(sf.split_part(pl.col("s"), ",", 2))["s"][0]
+        >>> df.select(sf.split_part(pl.col("s"), ",", 2))["split_part(s, ,, 2)"][0]
         'b'
     """
-    return _str_to_col(col).split_part(delimiter, part_num)
+    return _str_to_col(col).split_part(delimiter, part_num).alias(f"split_part({_col_name(col)}, {delimiter}, {part_num})")
 
 
 def substring_index(col: str | Expr, delimiter: str, count: int) -> Expr:
@@ -1860,12 +1862,12 @@ def substring_index(col: str | Expr, delimiter: str, count: int) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["a.b.c.d"]})
-        >>> df.select(sf.substring_index(pl.col("s"), ".", 2))["s"][0]
+        >>> df.select(sf.substring_index(pl.col("s"), ".", 2))["substring_index(s, ., 2)"][0]
         'a.b'
-        >>> df.select(sf.substring_index(pl.col("s"), ".", -2))["s"][0]
+        >>> df.select(sf.substring_index(pl.col("s"), ".", -2))["substring_index(s, ., -2)"][0]
         'c.d'
     """
-    return _str_to_col(col).substring_index(delimiter, count)
+    return _str_to_col(col).substring_index(delimiter, count).alias(f"substring_index({_col_name(col)}, {delimiter}, {count})")
 
 
 # ── date extras ───────────────────────────────────────────────────────────────
@@ -1878,10 +1880,10 @@ def quarter(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"d": [datetime.date(2023, 4, 15)]})
-        >>> df.select(sf.quarter(pl.col("d")))["d"][0]
+        >>> df.select(sf.quarter(pl.col("d")))["quarter(d)"][0]
         2
     """
-    return _str_to_col(col).quarter()
+    return _str_to_col(col).quarter().alias(f"quarter({_col_name(col)})")
 
 
 def minute(col: str | Expr) -> Expr:
@@ -1892,10 +1894,10 @@ def minute(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"t": [datetime.datetime(2023, 1, 1, 14, 35, 0)]})
-        >>> df.select(sf.minute(pl.col("t")))["t"][0]
+        >>> df.select(sf.minute(pl.col("t")))["minute(t)"][0]
         35
     """
-    return _str_to_col(col).minute()
+    return _str_to_col(col).minute().alias(f"minute({_col_name(col)})")
 
 
 def second(col: str | Expr) -> Expr:
@@ -1906,10 +1908,10 @@ def second(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"t": [datetime.datetime(2023, 1, 1, 14, 35, 45)]})
-        >>> df.select(sf.second(pl.col("t")))["t"][0]
+        >>> df.select(sf.second(pl.col("t")))["second(t)"][0]
         45
     """
-    return _str_to_col(col).second()
+    return _str_to_col(col).second().alias(f"second({_col_name(col)})")
 
 
 def weekofyear(col: str | Expr) -> Expr:
@@ -1920,10 +1922,10 @@ def weekofyear(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"d": [datetime.date(2023, 1, 9)]})
-        >>> df.select(sf.weekofyear(pl.col("d")))["d"][0]
+        >>> df.select(sf.weekofyear(pl.col("d")))["weekofyear(d)"][0]
         2
     """
-    return _str_to_col(col).weekofyear()
+    return _str_to_col(col).weekofyear().alias(f"weekofyear({_col_name(col)})")
 
 
 def weekday(col: str | Expr) -> Expr:
@@ -1934,10 +1936,10 @@ def weekday(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"d": [datetime.date(2023, 1, 9)]})
-        >>> df.select(sf.weekday(pl.col("d")))["d"][0]
+        >>> df.select(sf.weekday(pl.col("d")))["weekday(d)"][0]
         0
     """
-    return _str_to_col(col).weekday()
+    return _str_to_col(col).weekday().alias(f"weekday({_col_name(col)})")
 
 
 def date_trunc(unit: str, col: str | Expr) -> Expr:
@@ -1948,12 +1950,12 @@ def date_trunc(unit: str, col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"d": [datetime.date(2023, 6, 15)]})
-        >>> df.select(sf.date_trunc("month", pl.col("d")))["d"][0]
+        >>> df.select(sf.date_trunc("month", pl.col("d")))["date_trunc(month, d)"][0]
         datetime.date(2023, 6, 1)
-        >>> df.select(sf.date_trunc("year", pl.col("d")))["d"][0]
+        >>> df.select(sf.date_trunc("year", pl.col("d")))["date_trunc(year, d)"][0]
         datetime.date(2023, 1, 1)
     """
-    return _str_to_col(col).date_trunc(unit)
+    return _str_to_col(col).date_trunc(unit).alias(f"date_trunc({unit}, {_col_name(col)})")
 
 
 def make_date(year: Any, month: Any, day: Any) -> Expr:
@@ -2093,7 +2095,7 @@ def bool_and(col: str | Expr) -> Expr:
         >>> df2.select(sf.bool_and(pl.col("x")).alias("r"))["r"][0]
         False
     """
-    return _str_to_col(col).all()
+    return _str_to_col(col).all().alias(f"bool_and({_col_name(col)})")
 
 
 every = bool_and
@@ -2109,7 +2111,7 @@ def bool_or(col: str | Expr) -> Expr:
         >>> df.select(sf.bool_or(pl.col("x")).alias("r"))["r"][0]
         True
     """
-    return _str_to_col(col).any()
+    return _str_to_col(col).any().alias(f"bool_or({_col_name(col)})")
 
 
 some = bool_or
@@ -2124,10 +2126,10 @@ def nanvl(col: str | Expr, replacement: Any) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [float("nan"), 2.0, float("nan")]})
-        >>> df.select(sf.nanvl(pl.col("x"), -1.0))["x"].to_list()
+        >>> df.select(sf.nanvl(pl.col("x"), -1.0))["nanvl(x, col)"].to_list()
         [-1.0, 2.0, -1.0]
     """
-    return _str_to_col(col).nanvl(replacement)
+    return _str_to_col(col).nanvl(replacement).alias(f"nanvl({_col_name(col)}, {_col_name(replacement)})")
 
 
 def nvl2(col: str | Expr, not_null_val: Any, null_val: Any) -> Expr:
@@ -2137,10 +2139,10 @@ def nvl2(col: str | Expr, not_null_val: Any, null_val: Any) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [1, None, 3]})
-        >>> df.select(sf.nvl2(pl.col("a"), 100, 0))["a"].to_list()
+        >>> df.select(sf.nvl2(pl.col("a"), 100, 0))["nvl2(a, col, col)"].to_list()
         [100, 0, 100]
     """
-    return _str_to_col(col).nvl2(not_null_val, null_val)
+    return _str_to_col(col).nvl2(not_null_val, null_val).alias(f"nvl2({_col_name(col)}, {_col_name(not_null_val)}, {_col_name(null_val)})")
 
 
 # ── bitwise extras ────────────────────────────────────────────────────────────
@@ -2152,10 +2154,10 @@ def bitwise_not(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [5]})
-        >>> df.select(sf.bitwise_not(pl.col("x")))["x"][0]
+        >>> df.select(sf.bitwise_not(pl.col("x")))["~x"][0]
         -6
     """
-    return _str_to_col(col).bitwiseNOT()
+    return _str_to_col(col).bitwiseNOT().alias(f"~{_col_name(col)}")
 
 
 def shiftleft(col: str | Expr, n: int) -> Expr:
@@ -2165,10 +2167,10 @@ def shiftleft(col: str | Expr, n: int) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [1]})
-        >>> df.select(sf.shiftleft(pl.col("x"), 3))["x"][0]
+        >>> df.select(sf.shiftleft(pl.col("x"), 3))["shiftleft(x, 3)"][0]
         8
     """
-    return _str_to_col(col).shiftLeft(n)
+    return _str_to_col(col).shiftLeft(n).alias(f"shiftleft({_col_name(col)}, {n})")
 
 
 def shiftright(col: str | Expr, n: int) -> Expr:
@@ -2178,10 +2180,10 @@ def shiftright(col: str | Expr, n: int) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [8]})
-        >>> df.select(sf.shiftright(pl.col("x"), 2))["x"][0]
+        >>> df.select(sf.shiftright(pl.col("x"), 2))["shiftright(x, 2)"][0]
         2
     """
-    return _str_to_col(col).shiftRight(n)
+    return _str_to_col(col).shiftRight(n).alias(f"shiftright({_col_name(col)}, {n})")
 
 
 # ── array extras ─────────────────────────────────────────────────────────────
@@ -2193,12 +2195,12 @@ def element_at(col: str | Expr, index: int) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[10, 20, 30]]})
-        >>> df.select(sf.element_at(pl.col("a"), 2))["a"][0]
+        >>> df.select(sf.element_at(pl.col("a"), 2))["element_at(a, 2)"][0]
         20
-        >>> df.select(sf.element_at(pl.col("a"), -1))["a"][0]
+        >>> df.select(sf.element_at(pl.col("a"), -1))["element_at(a, -1)"][0]
         30
     """
-    return _str_to_col(col).element_at(index)
+    return _str_to_col(col).element_at(index).alias(f"element_at({_col_name(col)}, {index})")
 
 
 def arrays_overlap(col1: str | Expr, col2: str | Expr) -> Expr:
@@ -2208,13 +2210,13 @@ def arrays_overlap(col1: str | Expr, col2: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, 2, 3]], "b": [[3, 4, 5]]})
-        >>> df.select(sf.arrays_overlap(pl.col("a"), pl.col("b")))["a"][0]
+        >>> df.select(sf.arrays_overlap(pl.col("a"), pl.col("b")))["arrays_overlap(a, b)"][0]
         True
         >>> df2 = pl.DataFrame({"a": [[1, 2]], "b": [[3, 4]]})
-        >>> df2.select(sf.arrays_overlap(pl.col("a"), pl.col("b")))["a"][0]
+        >>> df2.select(sf.arrays_overlap(pl.col("a"), pl.col("b")))["arrays_overlap(a, b)"][0]
         False
     """
-    return _str_to_col(col1).arrays_overlap(_str_to_col(col2))
+    return _str_to_col(col1).arrays_overlap(_str_to_col(col2)).alias(f"arrays_overlap({_col_name(col1)}, {_col_name(col2)})")
 
 
 def array_repeat(element: Any, count: int) -> Expr:
@@ -2383,13 +2385,13 @@ def factorial(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [5]})
-        >>> df.select(sf.factorial(pl.col("x")))["x"][0]
+        >>> df.select(sf.factorial(pl.col("x")))["factorial(x)"][0]
         120
     """
     return _str_to_col(col).map_elements(
         lambda x: _math.factorial(int(x)) if x is not None else None,
         polars_datatypes.Int64(),
-    )
+    ).alias(f"factorial({_col_name(col)})")
 
 
 def hex(col: str | Expr) -> Expr:
@@ -2399,13 +2401,13 @@ def hex(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [255]})
-        >>> df.select(sf.hex(pl.col("x")))["x"][0]
+        >>> df.select(sf.hex(pl.col("x")))["hex(x)"][0]
         'FF'
     """
     return _str_to_col(col).map_elements(
         lambda x: format(int(x), "X") if x is not None else None,
         polars_datatypes.String(),
-    )
+    ).alias(f"hex({_col_name(col)})")
 
 
 def unhex(col: str | Expr) -> Expr:
@@ -2415,13 +2417,13 @@ def unhex(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": ["FF"]})
-        >>> df.select(sf.unhex(pl.col("x")))["x"][0]
+        >>> df.select(sf.unhex(pl.col("x")))["unhex(x)"][0]
         255
     """
     return _str_to_col(col).map_elements(
         lambda x: int(x, 16) if x is not None else None,
         polars_datatypes.Int64(),
-    )
+    ).alias(f"unhex({_col_name(col)})")
 
 
 # ── misc extras ───────────────────────────────────────────────────────────────
@@ -2440,10 +2442,10 @@ def chr(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [65, 66, 67]})
-        >>> df.select(sf.chr(pl.col("x")))["x"].to_list()
+        >>> df.select(sf.chr(pl.col("x")))["chr(x)"].to_list()
         ['A', 'B', 'C']
     """
-    return _str_to_col(col).chr()
+    return _str_to_col(col).chr().alias(f"chr({_col_name(col)})")
 
 
 def find_in_set(str_col: str | Expr, str_array_col: str | Expr) -> Expr:
@@ -2453,14 +2455,14 @@ def find_in_set(str_col: str | Expr, str_array_col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["a,b,c,d"]})
-        >>> df.select(sf.find_in_set("c", pl.col("s")))["s"][0]
+        >>> df.select(sf.find_in_set("c", pl.col("s")))["find_in_set(c, s)"][0]
         3
         >>> df2 = pl.DataFrame({"s": ["a,b,c"]})
-        >>> df2.select(sf.find_in_set("z", pl.col("s")))["s"][0]
+        >>> df2.select(sf.find_in_set("z", pl.col("s")))["find_in_set(z, s)"][0]
         0
     """
     sv = _str_to_col(str_col) if isinstance(str_col, Expr) else str_col
-    return _str_to_col(str_array_col).find_in_set(sv)
+    return _str_to_col(str_array_col).find_in_set(sv).alias(f"find_in_set({str_col}, {_col_name(str_array_col)})")
 
 
 def regexp_like(col: str | Expr, pattern: str) -> Expr:
@@ -2470,10 +2472,10 @@ def regexp_like(col: str | Expr, pattern: str) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello123", "world"]})
-        >>> df.select(sf.regexp_like(pl.col("s"), r"\\d+"))["s"].to_list()
+        >>> df.select(sf.regexp_like(pl.col("s"), r"\\d+"))["regexp_like(s, \\d+)"].to_list()
         [True, False]
     """
-    return _str_to_col(col).regexp_like(pattern)
+    return _str_to_col(col).regexp_like(pattern).alias(f"regexp_like({_col_name(col)}, {pattern})")
 
 
 printf = format_string  # alias
@@ -2486,12 +2488,12 @@ def overlay(col: str | Expr, replace: Any, pos: int, length: int | None = None) 
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello world"]})
-        >>> df.select(sf.overlay(pl.col("s"), "there", 7))["s"][0]
+        >>> df.select(sf.overlay(pl.col("s"), "there", 7))["overlay(s, there, 7, None)"][0]
         'hello there'
-        >>> df.select(sf.overlay(pl.col("s"), "X", 1, 5))["s"][0]
+        >>> df.select(sf.overlay(pl.col("s"), "X", 1, 5))["overlay(s, X, 1, 5)"][0]
         'X world'
     """
-    return _str_to_col(col).overlay(replace, pos, length)
+    return _str_to_col(col).overlay(replace, pos, length).alias(f"overlay({_col_name(col)}, {replace}, {pos}, {length})")
 
 
 # ── math extras (batch 2) ─────────────────────────────────────────────────────
@@ -2503,10 +2505,10 @@ def bround(col: str | Expr, d: int = 0) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [2.5, 3.5]})
-        >>> df.select(sf.bround(pl.col("x")))["x"].to_list()
+        >>> df.select(sf.bround(pl.col("x")))["bround(x, 0)"].to_list()
         [2.0, 4.0]
     """
-    return _str_to_col(col).bround(d)
+    return _str_to_col(col).bround(d).alias(f"bround({_col_name(col)}, {d})")
 
 
 def hypot(x: str | Expr, y: str | Expr) -> Expr:
@@ -2537,7 +2539,7 @@ def pmod(col: str | Expr, divisor: Any) -> Expr:
         >>> df2.select(sf.pmod(pl.col("x"), 3).alias("r"))["r"][0]
         2
     """
-    return _str_to_col(col).pmod(divisor)
+    return _str_to_col(col).pmod(divisor).alias(f"pmod({_col_name(col)}, {divisor})")
 
 
 def shiftrightunsigned(col: str | Expr, n: int) -> Expr:
@@ -2553,7 +2555,7 @@ def shiftrightunsigned(col: str | Expr, n: int) -> Expr:
     return _str_to_col(col).map_elements(
         lambda x: (x & 0xFFFF_FFFF_FFFF_FFFF) >> n if x is not None else None,
         polars_datatypes.Int64(),
-    )
+    ).alias(f"shiftrightunsigned({_col_name(col)}, {n})")
 
 
 # ── date extras (batch 2) ─────────────────────────────────────────────────────
@@ -2566,10 +2568,10 @@ def trunc(col: str | Expr, fmt: str) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"d": [datetime.date(2023, 6, 15)]})
-        >>> df.select(sf.trunc(pl.col("d"), "month"))["d"][0]
+        >>> df.select(sf.trunc(pl.col("d"), "month"))["trunc(d, month)"][0]
         datetime.date(2023, 6, 1)
     """
-    return _str_to_col(col).date_trunc(fmt)
+    return _str_to_col(col).date_trunc(fmt).alias(f"trunc({_col_name(col)}, {fmt})")
 
 
 def next_day(col: str | Expr, day_of_week: str) -> Expr:
@@ -2580,10 +2582,10 @@ def next_day(col: str | Expr, day_of_week: str) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"d": [datetime.date(2023, 1, 11)]})
-        >>> df.select(sf.next_day(pl.col("d"), "Mon"))["d"][0]
+        >>> df.select(sf.next_day(pl.col("d"), "Mon"))["next_day(d, Mon)"][0]
         datetime.date(2023, 1, 16)
     """
-    return _str_to_col(col).next_day(day_of_week)
+    return _str_to_col(col).next_day(day_of_week).alias(f"next_day({_col_name(col)}, {day_of_week})")
 
 
 def make_timestamp(
@@ -2635,10 +2637,10 @@ def unix_date(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"d": [datetime.date(1970, 1, 1), datetime.date(1970, 1, 2)]})
-        >>> df.select(sf.unix_date(pl.col("d")))["d"].to_list()
+        >>> df.select(sf.unix_date(pl.col("d")))["unix_date(d)"].to_list()
         [0, 1]
     """
-    return _str_to_col(col).unix_date()
+    return _str_to_col(col).unix_date().alias(f"unix_date({_col_name(col)})")
 
 
 def from_unixtime(col: str | Expr, fmt: str | None = None) -> Expr:
@@ -2649,15 +2651,16 @@ def from_unixtime(col: str | Expr, fmt: str | None = None) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import datetime
         >>> df = pl.DataFrame({"ts": [0]})
-        >>> df.select(sf.from_unixtime(pl.col("ts")))["ts"][0].date()
+        >>> df.select(sf.from_unixtime(pl.col("ts")))["from_unixtime(ts)"][0].date()
         datetime.date(1970, 1, 1)
-        >>> df.select(sf.from_unixtime(pl.col("ts"), "%Y-%m-%d"))["ts"][0]
+        >>> df.select(sf.from_unixtime(pl.col("ts"), "%Y-%m-%d"))["from_unixtime(ts, %Y-%m-%d)"][0]
         '1970-01-01'
     """
     dt_expr = polars_functions.from_epoch(_str_to_col(col), time_unit="s")
+    alias = f"from_unixtime({_col_name(col)}, {fmt})" if fmt else f"from_unixtime({_col_name(col)})"
     if fmt is not None:
-        return dt_expr.dt.strftime(fmt)
-    return dt_expr
+        return dt_expr.dt.strftime(fmt).alias(alias)
+    return dt_expr.alias(alias)
 
 
 # ── array extras (batch 2) ────────────────────────────────────────────────────
@@ -2704,11 +2707,11 @@ def shuffle(col: str | Expr, seed: int | None = None) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, 2, 3, 4, 5]]})
-        >>> result = df.select(sf.shuffle(pl.col("a"), seed=0))["a"][0].to_list()
+        >>> result = df.select(sf.shuffle(pl.col("a"), seed=0))["shuffle(a)"][0].to_list()
         >>> sorted(result)
         [1, 2, 3, 4, 5]
     """
-    return _str_to_col(col).shuffle(seed)
+    return _str_to_col(col).shuffle(seed).alias(f"shuffle({_col_name(col)})")
 
 
 def exists(col: str | Expr, f: Any) -> Expr:
@@ -2718,12 +2721,12 @@ def exists(col: str | Expr, f: Any) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, 2, 3]]})
-        >>> df.select(sf.exists(pl.col("a"), lambda e: e > 2))["a"][0]
+        >>> df.select(sf.exists(pl.col("a"), lambda e: e > 2))["exists(a)"][0]
         True
-        >>> df.select(sf.exists(pl.col("a"), lambda e: e > 10))["a"][0]
+        >>> df.select(sf.exists(pl.col("a"), lambda e: e > 10))["exists(a)"][0]
         False
     """
-    return _str_to_col(col).exists(f)
+    return _str_to_col(col).exists(f).alias(f"exists({_col_name(col)})")
 
 
 def aggregate(col: str | Expr, zero: Any, merge: Any, finish: Any = None) -> Expr:
@@ -2736,7 +2739,7 @@ def aggregate(col: str | Expr, zero: Any, merge: Any, finish: Any = None) -> Exp
         >>> df.select(sf.aggregate(pl.col("a"), 0, lambda acc, e: acc + e).alias("s"))["s"][0]
         10
     """
-    return _str_to_col(col).aggregate(zero, merge, finish)
+    return _str_to_col(col).aggregate(zero, merge, finish).alias(f"aggregate({_col_name(col)})")
 
 
 # ── aggregate extras (batch 2) ────────────────────────────────────────────────
@@ -2752,7 +2755,7 @@ def corr(col1: str | Expr, col2: str | Expr, method: str = "pearson") -> Expr:
         >>> builtins.round(df.select(sf.corr(pl.col("x"), pl.col("y")).alias("r"))["r"][0], 1)
         1.0
     """
-    return pl.corr(_str_to_col(col1), _str_to_col(col2), method=method)
+    return pl.corr(_str_to_col(col1), _str_to_col(col2), method=method).alias(f"corr({_col_name(col1)}, {_col_name(col2)})")
 
 
 def covar_samp(col1: str | Expr, col2: str | Expr) -> Expr:
@@ -2766,7 +2769,7 @@ def covar_samp(col1: str | Expr, col2: str | Expr) -> Expr:
         >>> builtins.round(df.select(sf.covar_samp(pl.col("x"), pl.col("y")).alias("c"))["c"][0], 1)
         1.0
     """
-    return pl.cov(_str_to_col(col1), _str_to_col(col2))
+    return pl.cov(_str_to_col(col1), _str_to_col(col2)).alias(f"covar_samp({_col_name(col1)}, {_col_name(col2)})")
 
 
 def covar_pop(col1: str | Expr, col2: str | Expr) -> Expr:
@@ -2789,7 +2792,7 @@ def covar_pop(col1: str | Expr, col2: str | Expr) -> Expr:
         cov = ((s1 - s1.mean()) * (s2 - s2.mean())).mean()
         return pl.Series([cov], dtype=pl.Float64)
 
-    return polars_functions.map_batches([c1, c2], _pop_cov, return_dtype=polars_datatypes.Float64())
+    return polars_functions.map_batches([c1, c2], _pop_cov, return_dtype=polars_datatypes.Float64()).alias(f"covar_pop({_col_name(col1)}, {_col_name(col2)})")
 
 
 def kurtosis(col: str | Expr) -> Expr:
@@ -2799,10 +2802,10 @@ def kurtosis(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [1.0, 2.0, 3.0, 4.0, 5.0]})
-        >>> df.select(sf.kurtosis(pl.col("x")))["kurtosis"][0] is not None
+        >>> df.select(sf.kurtosis(pl.col("x")))["kurtosis(x)"][0] is not None
         True
     """
-    return _str_to_col(col).kurtosis(fisher=True, bias=True).alias("kurtosis")
+    return _str_to_col(col).kurtosis(fisher=True, bias=True).alias(f"kurtosis({_col_name(col)})")
 
 
 def skewness(col: str | Expr) -> Expr:
@@ -2812,10 +2815,10 @@ def skewness(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [1.0, 1.0, 1.0, 2.0, 5.0]})
-        >>> df.select(sf.skewness(pl.col("x")))["skewness"][0] > 0
+        >>> df.select(sf.skewness(pl.col("x")))["skewness(x)"][0] > 0
         True
     """
-    return _str_to_col(col).skew(bias=True).alias("skewness")
+    return _str_to_col(col).skew(bias=True).alias(f"skewness({_col_name(col)})")
 
 
 def mode(col: str | Expr) -> Expr:
@@ -2843,10 +2846,10 @@ def percentile(col: str | Expr, pct: float, accuracy: int = 10_000) -> Expr:  # 
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [1.0, 2.0, 3.0, 4.0, 5.0]})
-        >>> df.select(sf.percentile(pl.col("x"), 0.5))["percentile"][0]
+        >>> df.select(sf.percentile(pl.col("x"), 0.5))["percentile_approx(x, 0.5)"][0]
         3.0
     """
-    return _str_to_col(col).quantile(pct, interpolation="nearest").alias("percentile")
+    return _str_to_col(col).quantile(pct, interpolation="nearest").alias(f"percentile_approx({_col_name(col)}, {pct})")
 
 
 def sum_distinct(col: str | Expr) -> Expr:
@@ -2859,7 +2862,7 @@ def sum_distinct(col: str | Expr) -> Expr:
         >>> df.select(sf.sum_distinct(pl.col("x")))["sum_distinct(x)"][0]
         6
     """
-    return _str_to_col(col).sum_distinct().alias("sum_distinct")
+    return _str_to_col(col).sum_distinct().alias(f"sum_distinct({_col_name(col)})")
 
 
 any_value = first  # arbitrary non-null value
@@ -2875,7 +2878,7 @@ def approx_count_distinct(col: str | Expr, rsd: float = 0.05) -> Expr:  # noqa: 
         >>> df.select(sf.approx_count_distinct(pl.col("x")).alias("n"))["n"][0]
         3
     """
-    return _str_to_col(col).n_unique()
+    return _str_to_col(col).n_unique().alias(f"approx_count_distinct({_col_name(col)})")
 
 
 # ── null / type-check standalones ─────────────────────────────────────────────
@@ -2887,10 +2890,10 @@ def isnull(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [None, 1, None]})
-        >>> df.select(sf.isnull(pl.col("x")))["x"].to_list()
+        >>> df.select(sf.isnull(pl.col("x")))["isnull(x)"].to_list()
         [True, False, True]
     """
-    return _str_to_col(col).is_null()
+    return _str_to_col(col).is_null().alias(f"isnull({_col_name(col)})")
 
 
 def isnan(col: str | Expr) -> Expr:
@@ -2900,10 +2903,10 @@ def isnan(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [float("nan"), 1.0, float("nan")]})
-        >>> df.select(sf.isnan(pl.col("x")))["x"].to_list()
+        >>> df.select(sf.isnan(pl.col("x")))["isnan(x)"].to_list()
         [True, False, True]
     """
-    return _str_to_col(col).is_nan()
+    return _str_to_col(col).is_nan().alias(f"isnan({_col_name(col)})")
 
 
 def isnotnull(col: str | Expr) -> Expr:
@@ -2913,10 +2916,10 @@ def isnotnull(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [None, 2, None]})
-        >>> df.select(sf.isnotnull(pl.col("x")))["x"].to_list()
+        >>> df.select(sf.isnotnull(pl.col("x")))["isnotnull(x)"].to_list()
         [False, True, False]
     """
-    return _str_to_col(col).is_not_null()
+    return _str_to_col(col).is_not_null().alias(f"isnotnull({_col_name(col)})")
 
 
 # ── hash extras ───────────────────────────────────────────────────────────────
@@ -2929,9 +2932,9 @@ def sha2(col: str | Expr, num_bits: int = 256) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import hashlib
         >>> df = pl.DataFrame({"s": ["hello"]})
-        >>> df.select(sf.sha2(pl.col("s"), 256))["s"][0] == hashlib.sha256(b"hello").hexdigest()
+        >>> df.select(sf.sha2(pl.col("s"), 256))["sha2(s, 256)"][0] == hashlib.sha256(b"hello").hexdigest()
         True
-        >>> df.select(sf.sha2(pl.col("s"), 512))["s"][0] == hashlib.sha512(b"hello").hexdigest()
+        >>> df.select(sf.sha2(pl.col("s"), 512))["sha2(s, 512)"][0] == hashlib.sha512(b"hello").hexdigest()
         True
     """
     import hashlib as _hashlib
@@ -2942,7 +2945,7 @@ def sha2(col: str | Expr, num_bits: int = 256) -> Expr:
     return _str_to_col(col).map_elements(
         lambda x: h(str(x).encode()).hexdigest() if x is not None else None,
         polars_datatypes.String(),
-    )
+    ).alias(f"sha2({_col_name(col)}, {num_bits})")
 
 
 def crc32(col: str | Expr) -> Expr:
@@ -2953,7 +2956,7 @@ def crc32(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import binascii
         >>> df = pl.DataFrame({"s": ["hello"]})
-        >>> df.select(sf.crc32(pl.col("s")))["s"][0] == (binascii.crc32(b"hello") & 0xFFFF_FFFF)
+        >>> df.select(sf.crc32(pl.col("s")))["crc32(s)"][0] == (binascii.crc32(b"hello") & 0xFFFF_FFFF)
         True
     """
     import binascii as _binascii
@@ -2961,7 +2964,7 @@ def crc32(col: str | Expr) -> Expr:
     return _str_to_col(col).map_elements(
         lambda x: _binascii.crc32(str(x).encode()) & 0xFFFF_FFFF if x is not None else None,
         polars_datatypes.UInt32(),
-    )
+    ).alias(f"crc32({_col_name(col)})")
 
 
 def hash(*cols: str | Expr) -> Expr:
@@ -3005,7 +3008,7 @@ def url_encode(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello world"]})
-        >>> df.select(sf.url_encode(pl.col("s")))["s"][0]
+        >>> df.select(sf.url_encode(pl.col("s")))["url_encode(s)"][0]
         'hello%20world'
     """
     from urllib.parse import quote as _quote
@@ -3013,7 +3016,7 @@ def url_encode(col: str | Expr) -> Expr:
     return _str_to_col(col).map_elements(
         lambda x: _quote(str(x), safe="") if x is not None else None,
         polars_datatypes.String(),
-    )
+    ).alias(f"url_encode({_col_name(col)})")
 
 
 def url_decode(col: str | Expr) -> Expr:
@@ -3023,7 +3026,7 @@ def url_decode(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello%20world"]})
-        >>> df.select(sf.url_decode(pl.col("s")))["s"][0]
+        >>> df.select(sf.url_decode(pl.col("s")))["url_decode(s)"][0]
         'hello world'
     """
     from urllib.parse import unquote as _unquote
@@ -3031,7 +3034,7 @@ def url_decode(col: str | Expr) -> Expr:
     return _str_to_col(col).map_elements(
         lambda x: _unquote(str(x)) if x is not None else None,
         polars_datatypes.String(),
-    )
+    ).alias(f"url_decode({_col_name(col)})")
 
 
 # ── JSON helper ───────────────────────────────────────────────────────────────
@@ -3043,10 +3046,10 @@ def get_json_object(col: str | Expr, path: str) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ['{"name": "alice", "age": 30}']})
-        >>> df.select(sf.get_json_object(pl.col("s"), "$.name"))["s"][0]
+        >>> df.select(sf.get_json_object(pl.col("s"), "$.name"))["get_json_object(s, $.name)"][0]
         'alice'
     """
-    return _str_to_col(col).str.json_path_match(path)
+    return _str_to_col(col).str.json_path_match(path).alias(f"get_json_object({_col_name(col)}, {path})")
 
 
 # ── string extras (batch 3) ───────────────────────────────────────────────────
@@ -3060,10 +3063,10 @@ def unbase64(col: str | Expr) -> Expr:
         >>> import base64
         >>> encoded = base64.b64encode(b"hello").decode()
         >>> df = pl.DataFrame({"s": [encoded]})
-        >>> df.select(sf.unbase64(pl.col("s")))["s"][0]
+        >>> df.select(sf.unbase64(pl.col("s")))["unbase64(s)"][0]
         'hello'
     """
-    return _str_to_col(col).unbase64()
+    return _str_to_col(col).unbase64().alias(f"unbase64({_col_name(col)})")
 
 
 def levenshtein(col1: str | Expr, col2: str | Expr) -> Expr:
@@ -3076,7 +3079,7 @@ def levenshtein(col1: str | Expr, col2: str | Expr) -> Expr:
         >>> df.select(sf.levenshtein(pl.col("a"), pl.col("b")).alias("r"))["r"][0]
         3
     """
-    return _str_to_col(col1).levenshtein(_str_to_col(col2))
+    return _str_to_col(col1).levenshtein(_str_to_col(col2)).alias(f"levenshtein({_col_name(col1)}, {_col_name(col2)})")
 
 
 def regexp_substr(col: str | Expr, pattern: str) -> Expr:
@@ -3086,10 +3089,10 @@ def regexp_substr(col: str | Expr, pattern: str) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello world 123"]})
-        >>> df.select(sf.regexp_substr(pl.col("s"), r"\\d+"))["s"][0]
+        >>> df.select(sf.regexp_substr(pl.col("s"), r"\\d+"))["regexp_substr(s, \\d+)"][0]
         '123'
     """
-    return _str_to_col(col).regexp_substr(pattern)
+    return _str_to_col(col).regexp_substr(pattern).alias(f"regexp_substr({_col_name(col)}, {pattern})")
 
 
 def elt(*cols: str | Expr) -> Expr:
@@ -3134,10 +3137,10 @@ def log1p(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [0.0]})
-        >>> df.select(sf.log1p(pl.col("x")))["x"][0]
+        >>> df.select(sf.log1p(pl.col("x")))["LOG1P(x)"][0]
         0.0
     """
-    return _str_to_col(col).log1p()
+    return _str_to_col(col).log1p().alias(f"LOG1P({_col_name(col)})")
 
 
 def expm1(col: str | Expr) -> Expr:
@@ -3147,10 +3150,10 @@ def expm1(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [0.0]})
-        >>> df.select(sf.expm1(pl.col("x")))["x"][0]
+        >>> df.select(sf.expm1(pl.col("x")))["EXPM1(x)"][0]
         0.0
     """
-    return _str_to_col(col).expm1()
+    return _str_to_col(col).expm1().alias(f"EXPM1({_col_name(col)})")
 
 
 def rint(col: str | Expr) -> Expr:
@@ -3160,10 +3163,10 @@ def rint(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [1.4, 1.6, -1.5]})
-        >>> df.select(sf.rint(pl.col("x")))["x"].to_list()
+        >>> df.select(sf.rint(pl.col("x")))["rint(x)"].to_list()
         [1.0, 2.0, -2.0]
     """
-    return _str_to_col(col).rint()
+    return _str_to_col(col).rint().alias(f"rint({_col_name(col)})")
 
 
 def remainder(col1: str | Expr, col2: str | Expr) -> Expr:
@@ -3234,10 +3237,10 @@ def bitcount(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [7]})
-        >>> df.select(sf.bitcount(pl.col("x")))["x"][0]
+        >>> df.select(sf.bitcount(pl.col("x")))["bit_count(x)"][0]
         3
     """
-    return _str_to_col(col).bitcount()
+    return _str_to_col(col).bitcount().alias(f"bit_count({_col_name(col)})")
 
 
 def toDegrees(col: str | Expr) -> Expr:
@@ -3249,10 +3252,10 @@ def toDegrees(col: str | Expr) -> Expr:
         >>> import math
         >>> import builtins
         >>> df = pl.DataFrame({"x": [math.pi]})
-        >>> builtins.round(df.select(sf.toDegrees(pl.col("x")))["x"][0])
+        >>> builtins.round(df.select(sf.toDegrees(pl.col("x")))["DEGREES(x)"][0])
         180
     """
-    return _str_to_col(col) * (180.0 / _math.pi)
+    return (_str_to_col(col) * (180.0 / _math.pi)).alias(f"DEGREES({_col_name(col)})")
 
 
 def toRadians(col: str | Expr) -> Expr:
@@ -3263,10 +3266,10 @@ def toRadians(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import builtins
         >>> df = pl.DataFrame({"x": [180.0]})
-        >>> builtins.round(df.select(sf.toRadians(pl.col("x")))["x"][0], 4)
+        >>> builtins.round(df.select(sf.toRadians(pl.col("x")))["RADIANS(x)"][0], 4)
         3.1416
     """
-    return _str_to_col(col) * (_math.pi / 180.0)
+    return (_str_to_col(col) * (_math.pi / 180.0)).alias(f"RADIANS({_col_name(col)})")
 
 
 # ── date extras (batch 3) ─────────────────────────────────────────────────────
@@ -3319,7 +3322,7 @@ def to_utc_timestamp(col: str | Expr, tz: str) -> Expr:
         >>> df.select(sf.to_utc_timestamp(pl.col("t"), "US/Eastern").alias("u")).height
         1
     """
-    return _str_to_col(col).to_utc_timestamp(tz)
+    return _str_to_col(col).to_utc_timestamp(tz).alias(f"to_utc_timestamp({_col_name(col)}, {tz})")
 
 
 def from_utc_timestamp(col: str | Expr, tz: str) -> Expr:
@@ -3333,7 +3336,7 @@ def from_utc_timestamp(col: str | Expr, tz: str) -> Expr:
         >>> df.select(sf.from_utc_timestamp(pl.col("t"), "US/Eastern").alias("u")).height
         1
     """
-    return _str_to_col(col).from_utc_timestamp(tz)
+    return _str_to_col(col).from_utc_timestamp(tz).alias(f"from_utc_timestamp({_col_name(col)}, {tz})")
 
 
 # ── array extras (batch 3) ────────────────────────────────────────────────────
@@ -3345,10 +3348,10 @@ def array_reverse(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, 2, 3]]})
-        >>> df.select(sf.array_reverse(pl.col("a")))["a"][0].to_list()
+        >>> df.select(sf.array_reverse(pl.col("a")))["reverse(a)"][0].to_list()
         [3, 2, 1]
     """
-    return _str_to_col(col).array_reverse()
+    return _str_to_col(col).array_reverse().alias(f"reverse({_col_name(col)})")
 
 
 def array_insert(col: str | Expr, pos: int, value: Any) -> Expr:
@@ -3452,10 +3455,10 @@ def to_json(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> import json
         >>> df = pl.DataFrame({"s": [{"a": 1, "b": 2}]}, schema={"s": pl.Struct({"a": pl.Int32, "b": pl.Int32})})
-        >>> json.loads(df.select(sf.to_json(pl.col("s")))["s"][0])
+        >>> json.loads(df.select(sf.to_json(pl.col("s")))["to_json(s)"][0])
         {'a': 1, 'b': 2}
     """
-    return _str_to_col(col).to_json()
+    return _str_to_col(col).to_json().alias(f"to_json({_col_name(col)})")
 
 
 def map_keys(col: str | Expr) -> Expr:
@@ -3465,10 +3468,10 @@ def map_keys(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"m": [[{"key": "a", "value": "1"}, {"key": "b", "value": "2"}]]})
-        >>> sorted(df.select(sf.map_keys(pl.col("m")))["m"][0].to_list())
+        >>> sorted(df.select(sf.map_keys(pl.col("m")))["map_keys(m)"][0].to_list())
         ['a', 'b']
     """
-    return _str_to_col(col).map_keys()
+    return _str_to_col(col).map_keys().alias(f"map_keys({_col_name(col)})")
 
 
 def map_values(col: str | Expr) -> Expr:
@@ -3478,10 +3481,10 @@ def map_values(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"m": [[{"key": "a", "value": "1"}, {"key": "b", "value": "2"}]]})
-        >>> sorted(df.select(sf.map_values(pl.col("m")))["m"][0].to_list())
+        >>> sorted(df.select(sf.map_values(pl.col("m")))["map_values(m)"][0].to_list())
         ['1', '2']
     """
-    return _str_to_col(col).map_values()
+    return _str_to_col(col).map_values().alias(f"map_values({_col_name(col)})")
 
 
 # ── fix unix_timestamp to support format string ───────────────────────────────
@@ -3569,10 +3572,10 @@ def map_from_entries(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> entries = [{"key": "x", "value": 99}]
         >>> df = pl.DataFrame({"m": [entries]})
-        >>> df.select(sf.map_from_entries(pl.col("m")))["m"][0][0]["key"]
+        >>> df.select(sf.map_from_entries(pl.col("m")))["map_from_entries(m)"][0][0]["key"]
         'x'
     """
-    return _str_to_col(col)
+    return _str_to_col(col).alias(f"map_from_entries({_col_name(col)})")
 
 
 def map_concat(*cols: str | Expr) -> Expr:
@@ -3685,10 +3688,10 @@ def ln(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [1.0]})
-        >>> df.select(sf.ln(pl.col("x")))["x"][0]
+        >>> df.select(sf.ln(pl.col("x")))["ln(x)"][0]
         0.0
     """
-    return _str_to_col(col).log(2.718281828459045)
+    return _str_to_col(col).log(2.718281828459045).alias(f"ln({_col_name(col)})")
 
 
 sha = sha1  # SHA-1 alias
@@ -3701,10 +3704,10 @@ def cardinality(col: str | Expr) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"a": [[1, 2, 3]]})
-        >>> df.select(sf.cardinality(pl.col("a")))["a"][0]
+        >>> df.select(sf.cardinality(pl.col("a")))["cardinality(a)"][0]
         3
     """
-    return _str_to_col(col).list.len()
+    return _str_to_col(col).list.len().alias(f"cardinality({_col_name(col)})")
 
 
 def approx_count_distinct(col: str | Expr) -> Expr:
@@ -3750,7 +3753,7 @@ def regexp(col: str | Expr, pattern: str) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["hello", "world"]})
-        >>> df.select(sf.regexp(pl.col("s"), "hel"))["s"][0]
+        >>> df.select(sf.regexp(pl.col("s"), "hel"))["regexp_like(s, hel)"][0]
         True
     """
     return regexp_like(col, pattern)
@@ -3763,15 +3766,15 @@ def format_number(col: str | Expr, d: int) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"x": [1234.5678]})
-        >>> df.select(sf.format_number(pl.col("x"), 2))["x"][0]
+        >>> df.select(sf.format_number(pl.col("x"), 2))["format_number(x, 2)"][0]
         '1234.57'
         >>> df2 = pl.DataFrame({"x": [3.9]})
-        >>> df2.select(sf.format_number(pl.col("x"), 0))["x"][0]
+        >>> df2.select(sf.format_number(pl.col("x"), 0))["format_number(x, 0)"][0]
         '4'
     """
     import builtins as _b
     fmt = f"{{:.{_b.max(0, d)}f}}"
-    return _str_to_col(col).map_elements(lambda v: fmt.format(v), return_dtype=pl.String)
+    return _str_to_col(col).map_elements(lambda v: fmt.format(v), return_dtype=pl.String).alias(f"format_number({_col_name(col)}, {d})")
 
 
 def regexp_instr(col: str | Expr, pattern: str) -> Expr:
@@ -3781,7 +3784,7 @@ def regexp_instr(col: str | Expr, pattern: str) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"s": ["abcabc", "xyz"]})
-        >>> df.select(sf.regexp_instr(pl.col("s"), "b"))["s"].to_list()
+        >>> df.select(sf.regexp_instr(pl.col("s"), "b"))["regexp_instr(s, b)"].to_list()
         [2, 0]
     """
     import re as _re
@@ -3790,7 +3793,7 @@ def regexp_instr(col: str | Expr, pattern: str) -> Expr:
             return None
         m = _re.search(pattern, s)
         return (m.start() + 1) if m else 0
-    return _str_to_col(col).map_elements(_find, return_dtype=pl.Int64)
+    return _str_to_col(col).map_elements(_find, return_dtype=pl.Int64).alias(f"regexp_instr({_col_name(col)}, {pattern})")
 
 
 def typeof(col: str | Expr) -> Expr:
@@ -3865,15 +3868,15 @@ def map_contains_key(col: str | Expr, key: Any) -> Expr:
         >>> import polars as pl
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> df = pl.DataFrame({"m": [[{"key": "a", "value": 1}, {"key": "b", "value": 2}]]})
-        >>> df.select(sf.map_contains_key(pl.col("m"), "a"))["m"][0]
+        >>> df.select(sf.map_contains_key(pl.col("m"), "a"))["map_contains_key(m, a)"][0]
         True
         >>> df2 = pl.DataFrame({"m": [[{"key": "a", "value": 1}]]})
-        >>> df2.select(sf.map_contains_key(pl.col("m"), "z"))["m"][0]
+        >>> df2.select(sf.map_contains_key(pl.col("m"), "z"))["map_contains_key(m, z)"][0]
         False
     """
     return _str_to_col(col).list.eval(
         pl.element().struct.field("key").eq(pl.lit(key))
-    ).list.any()
+    ).list.any().alias(f"map_contains_key({_col_name(col)}, {key})")
 
 
 def map_entries(col: str | Expr) -> Expr:
@@ -3884,10 +3887,10 @@ def map_entries(col: str | Expr) -> Expr:
         >>> import src.sparkpolars.polyspark.sql.functions as sf
         >>> entries = [{"key": "a", "value": 1}]
         >>> df = pl.DataFrame({"m": [entries]})
-        >>> df.select(sf.map_entries(pl.col("m")))["m"][0][0]["key"]
+        >>> df.select(sf.map_entries(pl.col("m")))["map_entries(m)"][0][0]["key"]
         'a'
     """
-    return _str_to_col(col)
+    return _str_to_col(col).alias(f"map_entries({_col_name(col)})")
 
 
 def map_from_arrays(keys: str | Expr, values: str | Expr) -> Expr:

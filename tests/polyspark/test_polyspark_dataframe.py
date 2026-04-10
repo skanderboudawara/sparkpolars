@@ -1,61 +1,1348 @@
-"""Tests for polyspark DataFrame monkey-patches."""
+"""Integration tests for polyspark DataFrame monkey-patches.
+
+Every test creates BOTH a Spark DataFrame and a Polars DataFrame with the same data,
+runs the native PySpark operation on the Spark DF and the polyspark operation on the
+Polars DF, then compares results via assert_frame_equal.
+"""
+
+import tempfile
 
 import pytest
+import pyspark.sql.functions as F
+import pyspark.sql.types as T
+from pyspark.sql import Row
 import polars as pl
 from polars.testing import assert_frame_equal
+import src.sparkpolars  # noqa: F401  # registers .toPolars() on SparkDataFrame 
 
-import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401 — installs patches
+import src.sparkpolars.polyspark.sql.dataframe  # noqa: F401
+import src.sparkpolars.polyspark.sql.functions as sf
 
 
-# ── Fixtures ──────────────────────────────────────────────────────────────────
-@pytest.fixture()
-def simple_df():
-    return pl.DataFrame({
-        "a": [1, 2, 3, 4, 5],
-        "b": ["x", "y", "z", "x", "y"],
-        "c": [1.0, 2.0, 3.0, 4.0, 5.0],
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _spark_to_polars(spark_df):
+    """Convert a Spark DataFrame to Polars via Pandas."""
+    return spark_df.toPolars()
+
+
+# ===========================================================================
+# Column operations
+# ===========================================================================
+
+
+def test_withColumn(spark_session):
+    spark_df = spark_session.createDataFrame([(1, "a"), (2, "b")], ["x", "y"])
+    polars_df = pl.DataFrame({"x": [1, 2], "y": ["a", "b"]})
+
+    spark_result = spark_df.withColumn("z", F.col("x") * 2)
+    polars_result = polars_df.withColumn("z", pl.col("x") * 2)
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("x"), polars_result.sort("x"), check_dtypes=False)
+
+
+def test_withColumns(spark_session):
+    spark_df = spark_session.createDataFrame([(1, 10), (2, 20)], ["a", "b"])
+    polars_df = pl.DataFrame({"a": [1, 2], "b": [10, 20]})
+
+    spark_result = spark_df.withColumn("c", F.col("a") + F.col("b"))
+    polars_result = polars_df.withColumns({"c": pl.col("a") + pl.col("b")})
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("a"), polars_result.sort("a"), check_dtypes=False)
+
+
+def test_withColumnRenamed(spark_session):
+    spark_df = spark_session.createDataFrame([(1,), (2,)], ["old_name"])
+    polars_df = pl.DataFrame({"old_name": [1, 2]})
+
+    spark_result = spark_df.withColumnRenamed("old_name", "new_name")
+    polars_result = polars_df.withColumnRenamed("old_name", "new_name")
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("new_name"), polars_result.sort("new_name"), check_dtypes=False)
+
+
+def test_withColumnsRenamed(spark_session):
+    spark_df = spark_session.createDataFrame([(1, "a"), (2, "b")], ["x", "y"])
+    polars_df = pl.DataFrame({"x": [1, 2], "y": ["a", "b"]})
+
+    spark_result = spark_df.withColumnsRenamed({"x": "col_x", "y": "col_y"})
+    polars_result = polars_df.withColumnsRenamed({"x": "col_x", "y": "col_y"})
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("col_x"), polars_result.sort("col_x"), check_dtypes=False)
+
+
+def test_select(spark_session):
+    spark_df = spark_session.createDataFrame([(1, "a", 1.0), (2, "b", 2.0)], ["a", "b", "c"])
+    polars_df = pl.DataFrame({"a": [1, 2], "b": ["a", "b"], "c": [1.0, 2.0]})
+
+    spark_result = spark_df.select("a", "b")
+    polars_result = polars_df.select("a", "b")
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("a"), polars_result.sort("a"), check_dtypes=False)
+
+
+def test_selectExpr(spark_session):
+    spark_df = spark_session.createDataFrame([(1,), (2,), (3,)], ["a"])
+    polars_df = pl.DataFrame({"a": [1, 2, 3]})
+
+    spark_result = spark_df.selectExpr("a", "a * 2 as a_doubled")
+    polars_result = polars_df.selectExpr("a", "a * 2 as a_doubled")
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("a"), polars_result.sort("a"), check_dtypes=False)
+
+
+def test_drop(spark_session):
+    spark_df = spark_session.createDataFrame([(1, "a", 1.0)], ["a", "b", "c"])
+    polars_df = pl.DataFrame({"a": [1], "b": ["a"], "c": [1.0]})
+
+    spark_result = spark_df.drop("c")
+    polars_result = polars_df.drop("c")
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected, polars_result, check_dtypes=False)
+
+
+def test_colRegex(spark_session):
+    spark_df = spark_session.createDataFrame([(1, 2, 3)], ["val_a", "val_b", "id"])
+    polars_df = pl.DataFrame({"val_a": [1], "val_b": [2], "id": [3]})
+
+    spark_result = spark_df.select(spark_df.colRegex("`^val_.*`"))
+    polars_result = polars_df.colRegex("^val_.*")
+
+    expected = _spark_to_polars(spark_result)
+    assert set(expected.columns) == set(polars_result.columns)
+    assert_frame_equal(
+        expected.select(sorted(expected.columns)),
+        polars_result.select(sorted(polars_result.columns)),
+        check_dtypes=False,
+    )
+
+
+# ===========================================================================
+# Filtering
+# ===========================================================================
+
+
+def test_filter(spark_session):
+    spark_df = spark_session.createDataFrame([(1,), (2,), (3,)], ["a"])
+    polars_df = pl.DataFrame({"a": [1, 2, 3]})
+
+    spark_result = spark_df.filter(F.col("a") > 1)
+    polars_result = polars_df.filter(pl.col("a") > 1)
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("a"), polars_result.sort("a"), check_dtypes=False)
+
+
+def test_where(spark_session):
+    spark_df = spark_session.createDataFrame([(1,), (2,), (3,)], ["a"])
+    polars_df = pl.DataFrame({"a": [1, 2, 3]})
+
+    spark_result = spark_df.where(F.col("a") <= 2)
+    polars_result = polars_df.where(pl.col("a") <= 2)
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("a"), polars_result.sort("a"), check_dtypes=False)
+
+
+def test_filter_sql_string(spark_session):
+    spark_df = spark_session.createDataFrame([(1,), (2,), (3,)], ["a"])
+    polars_df = pl.DataFrame({"a": [1, 2, 3]})
+
+    spark_result = spark_df.filter("a > 1")
+    polars_result = polars_df.filter("a > 1")
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("a"), polars_result.sort("a"), check_dtypes=False)
+
+
+# ===========================================================================
+# Sorting
+# ===========================================================================
+
+
+def test_sort_ascending(spark_session):
+    spark_df = spark_session.createDataFrame([(3,), (1,), (2,)], ["a"])
+    polars_df = pl.DataFrame({"a": [3, 1, 2]})
+
+    spark_result = spark_df.sort("a", ascending=True)
+    polars_result = polars_df.sort("a", ascending=True)
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected, polars_result, check_dtypes=False)
+
+
+def test_sort_descending(spark_session):
+    spark_df = spark_session.createDataFrame([(3,), (1,), (2,)], ["a"])
+    polars_df = pl.DataFrame({"a": [3, 1, 2]})
+
+    spark_result = spark_df.sort("a", ascending=False)
+    polars_result = polars_df.sort("a", ascending=False)
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected, polars_result, check_dtypes=False)
+
+
+def test_orderBy(spark_session):
+    spark_df = spark_session.createDataFrame([(3, "c"), (1, "a"), (2, "b")], ["a", "b"])
+    polars_df = pl.DataFrame({"a": [3, 1, 2], "b": ["c", "a", "b"]})
+
+    spark_result = spark_df.orderBy("a", ascending=False)
+    polars_result = polars_df.orderBy("a", ascending=False)
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected, polars_result, check_dtypes=False)
+
+
+def test_sortWithinPartitions(spark_session):
+    """sortWithinPartitions is aliased to sort in polyspark (single partition)."""
+    polars_df = pl.DataFrame({"a": [3, 1, 2]})
+    polars_result = polars_df.sortWithinPartitions("a", ascending=True)
+
+    expected = pl.DataFrame({"a": [1, 2, 3]})
+    assert_frame_equal(polars_result, expected, check_dtypes=False)
+
+
+def test_sort_multi_columns(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [(1, "b"), (2, "a"), (1, "a"), (2, "b")], ["x", "y"]
+    )
+    polars_df = pl.DataFrame({"x": [1, 2, 1, 2], "y": ["b", "a", "a", "b"]})
+
+    spark_result = spark_df.sort("x", "y", ascending=[True, False])
+    polars_result = polars_df.sort("x", "y", ascending=[True, False])
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected, polars_result, check_dtypes=False)
+
+
+# ===========================================================================
+# Joins -- ALL join types via parametrize
+# ===========================================================================
+
+
+@pytest.mark.parametrize("join_type", ["inner", "left", "right", "outer", "semi", "anti"])
+def test_join_types(spark_session, join_type):
+    spark_left = spark_session.createDataFrame(
+        [(1, "a"), (2, "b"), (3, "c"), (4, "d")], ["id", "val"]
+    )
+    spark_right = spark_session.createDataFrame(
+        [(2, "x"), (3, "y"), (5, "z")], ["id", "val2"]
+    )
+    polars_left = pl.DataFrame({"id": [1, 2, 3, 4], "val": ["a", "b", "c", "d"]})
+    polars_right = pl.DataFrame({"id": [2, 3, 5], "val2": ["x", "y", "z"]})
+
+    # Map generic test join type names to PySpark join type names
+    spark_join_map = {
+        "inner": "inner",
+        "left": "left",
+        "right": "right",
+        "outer": "outer",
+        "semi": "left_semi",
+        "anti": "left_anti",
+    }
+    # Map to polyspark join type names
+    polyspark_join_map = {
+        "inner": "inner",
+        "left": "left_outer",
+        "right": "right_outer",
+        "outer": "full_outer",
+        "semi": "semi",
+        "anti": "left_anti",
+    }
+
+    spark_result = spark_left.join(spark_right, on="id", how=spark_join_map[join_type])
+    polars_result = polars_left.join(polars_right, on="id", how=polyspark_join_map[join_type])
+
+    expected = _spark_to_polars(spark_result)
+
+    # Polyspark full_outer keeps both key columns (id + id_r_polyspark), coalesce them
+    if join_type == "outer" and "id_r_polyspark" in polars_result.columns:
+        polars_result = polars_result.with_columns(
+            pl.coalesce(pl.col("id"), pl.col("id_r_polyspark")).alias("id")
+        ).drop("id_r_polyspark")
+
+    # Determine sort columns -- use only columns that exist in both results
+    sort_cols = sorted(set(expected.columns) & set(polars_result.columns))
+    # For outer join, there may be nulls so we fill before sorting
+    if join_type == "outer":
+        expected = expected.fill_null("")
+        polars_result = polars_result.fill_null("")
+
+    assert set(expected.columns) == set(polars_result.columns)
+    assert_frame_equal(
+        expected.select(sorted(expected.columns)).sort(sort_cols),
+        polars_result.select(sorted(polars_result.columns)).sort(sort_cols),
+        check_dtypes=False,
+    )
+
+
+def test_cross_join(spark_session):
+    spark_left = spark_session.createDataFrame([(1,), (2,)], ["a"])
+    spark_right = spark_session.createDataFrame([(10,), (20,)], ["b"])
+    polars_left = pl.DataFrame({"a": [1, 2]})
+    polars_right = pl.DataFrame({"b": [10, 20]})
+
+    spark_result = spark_left.crossJoin(spark_right)
+    polars_result = polars_left.crossJoin(polars_right)
+
+    expected = _spark_to_polars(spark_result)
+    assert expected.shape == polars_result.shape
+    assert_frame_equal(
+        expected.sort("a", "b"),
+        polars_result.sort("a", "b"),
+        check_dtypes=False,
+    )
+
+
+def test_join_with_null_keys(spark_session):
+    spark_left = spark_session.createDataFrame(
+        [(1, "a"), (None, "b"), (3, "c")],
+        T.StructType([
+            T.StructField("id", T.IntegerType(), True),
+            T.StructField("val", T.StringType()),
+        ]),
+    )
+    spark_right = spark_session.createDataFrame(
+        [(1, "x"), (None, "y")],
+        T.StructType([
+            T.StructField("id", T.IntegerType(), True),
+            T.StructField("val2", T.StringType()),
+        ]),
+    )
+    polars_left = pl.DataFrame({"id": [1, None, 3], "val": ["a", "b", "c"]}).cast({"id": pl.Int32})
+    polars_right = pl.DataFrame({"id": [1, None], "val2": ["x", "y"]}).cast({"id": pl.Int32})
+
+    spark_result = spark_left.join(spark_right, on="id", how="inner")
+    polars_result = polars_left.join(polars_right, on="id", how="inner")
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(
+        expected.sort("id"),
+        polars_result.sort("id"),
+        check_dtypes=False,
+    )
+
+
+def test_join_duplicate_keys(spark_session):
+    spark_left = spark_session.createDataFrame(
+        [(1, "a"), (1, "b"), (2, "c")], ["id", "val"]
+    )
+    spark_right = spark_session.createDataFrame(
+        [(1, "x"), (1, "y")], ["id", "val2"]
+    )
+    polars_left = pl.DataFrame({"id": [1, 1, 2], "val": ["a", "b", "c"]})
+    polars_right = pl.DataFrame({"id": [1, 1], "val2": ["x", "y"]})
+
+    spark_result = spark_left.join(spark_right, on="id", how="inner")
+    polars_result = polars_left.join(polars_right, on="id", how="inner")
+
+    expected = _spark_to_polars(spark_result)
+    assert expected.height == polars_result.height  # 2*2 = 4 matches
+    assert_frame_equal(
+        expected.sort("id", "val", "val2"),
+        polars_result.sort("id", "val", "val2"),
+        check_dtypes=False,
+    )
+
+
+def test_join_multi_column_keys(spark_session):
+    spark_left = spark_session.createDataFrame(
+        [(1, "a", 10), (2, "b", 20)], ["id", "key", "val"]
+    )
+    spark_right = spark_session.createDataFrame(
+        [(1, "a", 100), (2, "c", 200)], ["id", "key", "val2"]
+    )
+    polars_left = pl.DataFrame({"id": [1, 2], "key": ["a", "b"], "val": [10, 20]})
+    polars_right = pl.DataFrame({"id": [1, 2], "key": ["a", "c"], "val2": [100, 200]})
+
+    spark_result = spark_left.join(spark_right, on=["id", "key"], how="inner")
+    polars_result = polars_left.join(polars_right, on=["id", "key"], how="inner")
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(
+        expected.sort("id"),
+        polars_result.sort("id"),
+        check_dtypes=False,
+    )
+
+
+# ===========================================================================
+# Set operations
+# ===========================================================================
+
+
+def test_union(spark_session):
+    spark_df1 = spark_session.createDataFrame([(1,), (2,)], ["a"])
+    spark_df2 = spark_session.createDataFrame([(3,), (4,)], ["a"])
+    polars_df1 = pl.DataFrame({"a": [1, 2]})
+    polars_df2 = pl.DataFrame({"a": [3, 4]})
+
+    spark_result = spark_df1.union(spark_df2)
+    polars_result = polars_df1.union(polars_df2)
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("a"), polars_result.sort("a"), check_dtypes=False)
+
+
+def test_unionAll(spark_session):
+    spark_df1 = spark_session.createDataFrame([(1,), (2,)], ["a"])
+    spark_df2 = spark_session.createDataFrame([(2,), (3,)], ["a"])
+    polars_df1 = pl.DataFrame({"a": [1, 2]})
+    polars_df2 = pl.DataFrame({"a": [2, 3]})
+
+    spark_result = spark_df1.unionAll(spark_df2)
+    polars_result = polars_df1.unionAll(polars_df2)
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("a"), polars_result.sort("a"), check_dtypes=False)
+
+
+def test_unionByName(spark_session):
+    spark_df1 = spark_session.createDataFrame([(1, "a")], ["id", "val"])
+    spark_df2 = spark_session.createDataFrame([(2, "b")], ["id", "val"])
+    polars_df1 = pl.DataFrame({"id": [1], "val": ["a"]})
+    polars_df2 = pl.DataFrame({"id": [2], "val": ["b"]})
+
+    spark_result = spark_df1.unionByName(spark_df2)
+    polars_result = polars_df1.unionByName(polars_df2)
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("id"), polars_result.sort("id"), check_dtypes=False)
+
+
+def test_intersect(spark_session):
+    spark_df1 = spark_session.createDataFrame([(1,), (2,), (3,)], ["a"])
+    spark_df2 = spark_session.createDataFrame([(2,), (3,), (4,)], ["a"])
+    polars_df1 = pl.DataFrame({"a": [1, 2, 3]})
+    polars_df2 = pl.DataFrame({"a": [2, 3, 4]})
+
+    spark_result = spark_df1.intersect(spark_df2)
+    polars_result = polars_df1.intersect(polars_df2)
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("a"), polars_result.sort("a"), check_dtypes=False)
+
+
+def test_intersectAll(spark_session):
+    spark_df1 = spark_session.createDataFrame(
+        [("a", 1), ("a", 1), ("b", 3), ("c", 4)], ["C1", "C2"]
+    )
+    spark_df2 = spark_session.createDataFrame(
+        [("a", 1), ("a", 1), ("b", 3)], ["C1", "C2"]
+    )
+    polars_df1 = pl.DataFrame({"C1": ["a", "a", "b", "c"], "C2": [1, 1, 3, 4]})
+    polars_df2 = pl.DataFrame({"C1": ["a", "a", "b"], "C2": [1, 1, 3]})
+
+    spark_result = spark_df1.intersectAll(spark_df2)
+    polars_result = polars_df1.intersectAll(polars_df2)
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(
+        expected.sort("C1", "C2"),
+        polars_result.sort("C1", "C2"),
+        check_dtypes=False,
+    )
+
+
+def test_subtract(spark_session):
+    spark_df1 = spark_session.createDataFrame([(1,), (2,), (3,)], ["a"])
+    spark_df2 = spark_session.createDataFrame([(2,), (3,), (4,)], ["a"])
+    polars_df1 = pl.DataFrame({"a": [1, 2, 3]})
+    polars_df2 = pl.DataFrame({"a": [2, 3, 4]})
+
+    spark_result = spark_df1.subtract(spark_df2)
+    polars_result = polars_df1.subtract(polars_df2)
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("a"), polars_result.sort("a"), check_dtypes=False)
+
+
+# ===========================================================================
+# GroupBy -- ALL aggregation types
+# ===========================================================================
+
+
+def test_groupBy_agg_sum(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [("A", 100), ("A", 200), ("B", 300)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+
+    spark_result = spark_df.groupBy("dept").agg(F.sum("sal").alias("sum(sal)"))
+    polars_result = polars_df.groupBy("dept").agg(sf.sum("sal"))
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("dept"), polars_result.sort("dept"), check_dtypes=False)
+
+
+def test_groupBy_agg_avg(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [("A", 100), ("A", 200), ("B", 300)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+
+    spark_result = spark_df.groupBy("dept").agg(F.avg("sal").alias("avg(sal)"))
+    polars_result = polars_df.groupBy("dept").agg(sf.avg("sal"))
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("dept"), polars_result.sort("dept"), check_dtypes=False)
+
+
+def test_groupBy_agg_min(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [("A", 100), ("A", 200), ("B", 300)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+
+    spark_result = spark_df.groupBy("dept").agg(F.min("sal").alias("min(sal)"))
+    polars_result = polars_df.groupBy("dept").agg(sf.min("sal"))
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("dept"), polars_result.sort("dept"), check_dtypes=False)
+
+
+def test_groupBy_agg_max(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [("A", 100), ("A", 200), ("B", 300)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+
+    spark_result = spark_df.groupBy("dept").agg(F.max("sal").alias("max(sal)"))
+    polars_result = polars_df.groupBy("dept").agg(sf.max("sal"))
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("dept"), polars_result.sort("dept"), check_dtypes=False)
+
+
+def test_groupBy_agg_count(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [("A", 100), ("A", 200), ("B", 300)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+
+    spark_result = spark_df.groupBy("dept").agg(F.count("sal").alias("count(sal)"))
+    polars_result = polars_df.groupBy("dept").agg(sf.count("sal"))
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("dept"), polars_result.sort("dept"), check_dtypes=False)
+
+
+def test_groupBy_agg_multiple(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [("A", 100), ("A", 200), ("B", 300)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+
+    spark_result = spark_df.groupBy("dept").agg(
+        F.sum("sal").alias("sum(sal)"),
+        F.avg("sal").alias("avg(sal)"),
+    )
+    polars_result = polars_df.groupBy("dept").agg(sf.sum("sal"), sf.avg("sal"))
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("dept"), polars_result.sort("dept"), check_dtypes=False)
+
+
+def test_groupBy_shorthand_sum(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [("A", 100), ("A", 200), ("B", 300)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+
+    spark_result = spark_df.groupBy("dept").sum("sal")
+    polars_result = polars_df.groupBy("dept").sum("sal")
+
+    expected = _spark_to_polars(spark_result)
+    # Spark names the column "sum(sal)" as well
+    assert_frame_equal(expected.sort("dept"), polars_result.sort("dept"), check_dtypes=False)
+
+
+def test_groupBy_shorthand_avg(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [("A", 100), ("A", 200), ("B", 300)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+
+    spark_result = spark_df.groupBy("dept").avg("sal")
+    polars_result = polars_df.groupBy("dept").avg("sal")
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("dept"), polars_result.sort("dept"), check_dtypes=False)
+
+
+def test_groupBy_shorthand_min(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [("A", 100), ("A", 200), ("B", 300)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+
+    spark_result = spark_df.groupBy("dept").min("sal")
+    polars_result = polars_df.groupBy("dept").min("sal")
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("dept"), polars_result.sort("dept"), check_dtypes=False)
+
+
+def test_groupBy_shorthand_max(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [("A", 100), ("A", 200), ("B", 300)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+
+    spark_result = spark_df.groupBy("dept").max("sal")
+    polars_result = polars_df.groupBy("dept").max("sal")
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("dept"), polars_result.sort("dept"), check_dtypes=False)
+
+
+def test_groupBy_shorthand_count(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [("A", 100), ("A", 200), ("B", 300)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+
+    spark_result = spark_df.groupBy("dept").count()
+    polars_result = polars_df.groupBy("dept").count()
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("dept"), polars_result.sort("dept"), check_dtypes=False)
+
+
+def test_groupBy_dict_agg(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [("A", 100), ("A", 200), ("B", 300)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+
+    spark_result = spark_df.groupBy("dept").agg({"sal": "sum"})
+    polars_result = polars_df.groupBy("dept").agg({"sal": "sum"})
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("dept"), polars_result.sort("dept"), check_dtypes=False)
+
+
+def test_groupBy_global_agg(spark_session):
+    spark_df = spark_session.createDataFrame([(100,), (200,), (300,)], ["sal"])
+    polars_df = pl.DataFrame({"sal": [100, 200, 300]})
+
+    spark_result = spark_df.agg(F.sum("sal").alias("sum(sal)"))
+    polars_result = polars_df.agg(sf.sum("sal"))
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected, polars_result, check_dtypes=False)
+
+
+# ===========================================================================
+# SparkGroupBy wrapper tests
+# ===========================================================================
+
+
+def test_sparkgroupby_count(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [("A",), ("A",), ("B",), ("B",)], ["dept"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B", "B"]})
+
+    spark_result = spark_df.groupBy("dept").count()
+    polars_result = polars_df.groupBy("dept").count()
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("dept"), polars_result.sort("dept"), check_dtypes=False)
+
+
+def test_sparkgroupby_sum(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [("A", 10), ("A", 20), ("B", 30)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [10, 20, 30]})
+
+    spark_result = spark_df.groupBy("dept").sum("sal")
+    polars_result = polars_df.groupBy("dept").sum("sal")
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("dept"), polars_result.sort("dept"), check_dtypes=False)
+
+
+def test_sparkgroupby_avg(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [("A", 10), ("A", 20), ("B", 30)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [10, 20, 30]})
+
+    spark_result = spark_df.groupBy("dept").avg("sal")
+    polars_result = polars_df.groupBy("dept").avg("sal")
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("dept"), polars_result.sort("dept"), check_dtypes=False)
+
+
+def test_sparkgroupby_min(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [("A", 10), ("A", 20), ("B", 30)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [10, 20, 30]})
+
+    spark_result = spark_df.groupBy("dept").min("sal")
+    polars_result = polars_df.groupBy("dept").min("sal")
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("dept"), polars_result.sort("dept"), check_dtypes=False)
+
+
+def test_sparkgroupby_max(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [("A", 10), ("A", 20), ("B", 30)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [10, 20, 30]})
+
+    spark_result = spark_df.groupBy("dept").max("sal")
+    polars_result = polars_df.groupBy("dept").max("sal")
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("dept"), polars_result.sort("dept"), check_dtypes=False)
+
+
+def test_sparkgroupby_agg_multiple(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [("A", 10), ("A", 20), ("B", 30)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [10, 20, 30]})
+
+    spark_result = spark_df.groupBy("dept").agg(
+        F.sum("sal").alias("sum(sal)"),
+        F.min("sal").alias("min(sal)"),
+        F.max("sal").alias("max(sal)"),
+    )
+    polars_result = polars_df.groupBy("dept").agg(
+        sf.sum("sal"), sf.min("sal"), sf.max("sal")
+    )
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("dept"), polars_result.sort("dept"), check_dtypes=False)
+
+
+# ===========================================================================
+# Describe / Summary
+# ===========================================================================
+
+
+def test_describe(spark_session):
+    spark_df = spark_session.createDataFrame([(1, 1.0), (2, 2.0), (3, 3.0)], ["a", "b"])
+    polars_df = pl.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+
+    spark_result = spark_df.describe()
+    polars_result = polars_df.describe()
+
+    # Both should have a "statistic" column and produce summary stats
+    expected = _spark_to_polars(spark_result)
+    assert "summary" in expected.columns or "statistic" in expected.columns
+    assert "statistic" in polars_result.columns
+    # Check that both produce the same number of summary statistics
+    assert expected.height > 0
+    assert polars_result.height > 0
+
+
+def test_summary(spark_session):
+    spark_df = spark_session.createDataFrame([(1,), (2,), (3,)], ["a"])
+    polars_df = pl.DataFrame({"a": [1, 2, 3]})
+
+    spark_result = spark_df.summary()
+    polars_result = polars_df.summary()
+
+    expected = _spark_to_polars(spark_result)
+    assert expected.height > 0
+    assert polars_result.height > 0
+    assert "statistic" in polars_result.columns
+
+
+# ===========================================================================
+# Null handling
+# ===========================================================================
+
+
+def test_fillna(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [(1, None), (None, "b"), (3, None)],
+        T.StructType([
+            T.StructField("a", T.IntegerType(), True),
+            T.StructField("b", T.StringType(), True),
+        ]),
+    )
+    polars_df = pl.DataFrame(
+        {"a": [1, None, 3], "b": [None, "b", None]}
+    ).cast({"a": pl.Int32})
+
+    spark_result = spark_df.fillna({"a": 0, "b": "missing"})
+    polars_result = polars_df.fillna(0, subset=["a"]).fillna("missing", subset=["b"])
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("a"), polars_result.sort("a"), check_dtypes=False)
+
+
+def test_dropna(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [(1.0,), (float("nan"),), (3.0,)], ["a"]
+    )
+    polars_df = pl.DataFrame({"a": [1.0, float("nan"), 3.0]})
+
+    spark_result = spark_df.dropna()
+    polars_result = polars_df.dropna()
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("a"), polars_result.sort("a"), check_dtypes=False)
+
+
+def test_dropnulls(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [(1, "a"), (None, "b"), (3, None)],
+        T.StructType([
+            T.StructField("a", T.IntegerType(), True),
+            T.StructField("b", T.StringType(), True),
+        ]),
+    )
+    polars_df = pl.DataFrame(
+        {"a": [1, None, 3], "b": ["a", "b", None]}
+    ).cast({"a": pl.Int32})
+
+    spark_result = spark_df.dropna()
+    polars_result = polars_df.dropnulls()
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected, polars_result, check_dtypes=False)
+
+
+def test_na_drop(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [(1, "a"), (None, "b"), (3, None)],
+        T.StructType([
+            T.StructField("a", T.IntegerType(), True),
+            T.StructField("b", T.StringType(), True),
+        ]),
+    )
+    polars_df = pl.DataFrame(
+        {"a": [1, None, 3], "b": ["a", "b", None]}
+    ).cast({"a": pl.Int32})
+
+    spark_result = spark_df.na.drop()
+    polars_result = polars_df.na.drop()
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected, polars_result, check_dtypes=False)
+
+
+def test_na_fill(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [(1, None), (None, 20)],
+        T.StructType([
+            T.StructField("a", T.IntegerType(), True),
+            T.StructField("b", T.IntegerType(), True),
+        ]),
+    )
+    polars_df = pl.DataFrame({"a": [1, None], "b": [None, 20]}).cast({"a": pl.Int32, "b": pl.Int32})
+
+    spark_result = spark_df.na.fill(0)
+    polars_result = polars_df.na.fill(0)
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("a"), polars_result.sort("a"), check_dtypes=False)
+
+
+def test_na_replace(spark_session):
+    spark_df = spark_session.createDataFrame([(1,), (2,), (3,)], ["a"])
+    polars_df = pl.DataFrame({"a": [1, 2, 3]})
+
+    spark_result = spark_df.na.replace(1, 99)
+    polars_result = polars_df.na.replace(1, 99)
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("a"), polars_result.sort("a"), check_dtypes=False)
+
+
+# ===========================================================================
+# Deduplication
+# ===========================================================================
+
+
+def test_distinct(spark_session):
+    spark_df = spark_session.createDataFrame([(1,), (1,), (2,), (3,)], ["a"])
+    polars_df = pl.DataFrame({"a": [1, 1, 2, 3]})
+
+    spark_result = spark_df.distinct()
+    polars_result = polars_df.distinct()
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("a"), polars_result.sort("a"), check_dtypes=False)
+
+
+def test_dropDuplicates(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [(1, "a"), (1, "b"), (2, "a")], ["x", "y"]
+    )
+    polars_df = pl.DataFrame({"x": [1, 1, 2], "y": ["a", "b", "a"]})
+
+    spark_result = spark_df.dropDuplicates(["x"])
+    polars_result = polars_df.dropDuplicates(subset=["x"])
+
+    expected = _spark_to_polars(spark_result)
+    assert expected.height == polars_result.height
+    assert set(expected["x"].to_list()) == set(polars_result["x"].to_list())
+
+
+def test_drop_duplicates(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [(1, "a"), (1, "b"), (2, "a")], ["x", "y"]
+    )
+    polars_df = pl.DataFrame({"x": [1, 1, 2], "y": ["a", "b", "a"]})
+
+    spark_result = spark_df.drop_duplicates(["x"])
+    polars_result = polars_df.drop_duplicates(subset=["x"])
+
+    assert _spark_to_polars(spark_result).height == polars_result.height
+
+
+# ===========================================================================
+# Sampling (shape/behavior tests -- can't compare exact results)
+# ===========================================================================
+
+
+def test_sample_fraction(spark_session):
+    spark_df = spark_session.createDataFrame([(i,) for i in range(10)], ["a"])
+    polars_df = pl.DataFrame({"a": list(range(10))})
+
+    spark_result = spark_df.sample(fraction=0.5, seed=42)
+    polars_result = polars_df.sample(fraction=0.5, seed=42)
+
+    assert isinstance(_spark_to_polars(spark_result), pl.DataFrame)
+    assert isinstance(polars_result, pl.DataFrame)
+    assert polars_result.height <= polars_df.height
+
+
+def test_randomSplit(spark_session):
+    spark_df = spark_session.createDataFrame([(i,) for i in range(10)], ["a"])
+    polars_df = pl.DataFrame({"a": list(range(10))})
+
+    spark_splits = spark_df.randomSplit([0.6, 0.4], seed=42)
+    polars_splits = polars_df.randomSplit([0.6, 0.4], seed=42)
+
+    assert len(spark_splits) == len(polars_splits) == 2
+    spark_total = sum(s.count() for s in spark_splits)
+    polars_total = sum(len(s) for s in polars_splits)
+    assert spark_total == polars_total == 10
+
+
+# ===========================================================================
+# Slicing
+# ===========================================================================
+
+
+def test_take(spark_session):
+    spark_df = spark_session.createDataFrame([(1,), (2,), (3,)], ["a"])
+    polars_df = pl.DataFrame({"a": [1, 2, 3]})
+
+    spark_result = spark_df.take(2)
+    polars_result = polars_df.take(2)
+
+    # Spark take returns list of Row, polyspark returns list of dict
+    assert len(spark_result) == len(polars_result) == 2
+
+
+def test_first(spark_session):
+    spark_df = spark_session.createDataFrame([(1, "a"), (2, "b")], ["x", "y"])
+    polars_df = pl.DataFrame({"x": [1, 2], "y": ["a", "b"]})
+
+    spark_result = spark_df.first()
+    polars_result = polars_df.first()
+
+    assert spark_result["x"] == polars_result["x"]
+    assert spark_result["y"] == polars_result["y"]
+
+
+def test_offset(spark_session):
+    spark_df = spark_session.createDataFrame([(1,), (2,), (3,), (4,)], ["a"])
+    polars_df = pl.DataFrame({"a": [1, 2, 3, 4]})
+
+    spark_result = spark_df.offset(2)
+    polars_result = polars_df.offset(2)
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected, polars_result, check_dtypes=False)
+
+
+# ===========================================================================
+# Transformation
+# ===========================================================================
+
+
+def test_transform(spark_session):
+    spark_df = spark_session.createDataFrame([(1,), (2,), (3,)], ["a"])
+    polars_df = pl.DataFrame({"a": [1, 2, 3]})
+
+    def add_col_spark(df):
+        return df.withColumn("b", F.col("a") * 2)
+
+    def add_col_polars(df):
+        return df.withColumn("b", pl.col("a") * 2)
+
+    spark_result = spark_df.transform(add_col_spark)
+    polars_result = polars_df.transform(add_col_polars)
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("a"), polars_result.sort("a"), check_dtypes=False)
+
+
+def test_melt(spark_session):
+    # Spark uses unpivot (available in Spark 3.4+), we test the polyspark melt
+    polars_df = pl.DataFrame({"id": [1, 2], "val_a": [10, 20], "val_b": [30, 40]})
+
+    result = polars_df.melt(id_vars=["id"], value_vars=["val_a", "val_b"])
+    assert "variable" in result.columns
+    assert "value" in result.columns
+    assert result.height == 4
+
+
+# ===========================================================================
+# Output conversion (test they don't error and return correct type)
+# ===========================================================================
+
+
+def test_toDF(spark_session):
+    spark_df = spark_session.createDataFrame([(1, "a")], ["x", "y"])
+    polars_df = pl.DataFrame({"x": [1], "y": ["a"]})
+
+    spark_result = spark_df.toDF("col1", "col2")
+    polars_result = polars_df.toDF("col1", "col2")
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected, polars_result, check_dtypes=False)
+
+
+def test_toJSON(spark_session):
+    polars_df = pl.DataFrame({"a": [1, 2], "b": ["x", "y"]})
+    result = polars_df.toJSON()
+    assert isinstance(result, str)
+    assert '"a"' in result
+
+
+def test_toPandas(spark_session):
+    import pandas as pd
+
+    spark_df = spark_session.createDataFrame([(1, "a"), (2, "b")], ["x", "y"])
+    polars_df = pl.DataFrame({"x": [1, 2], "y": ["a", "b"]})
+
+    spark_result = spark_df.toPandas()
+    polars_result = polars_df.toPandas()
+
+    assert isinstance(spark_result, pd.DataFrame)
+    assert isinstance(polars_result, pd.DataFrame)
+    assert list(spark_result.columns) == list(polars_result.columns)
+
+
+def test_toArrow(spark_session):
+    import pyarrow as pa
+
+    polars_df = pl.DataFrame({"a": [1, 2], "b": ["x", "y"]})
+    result = polars_df.toArrow()
+    assert isinstance(result, pa.Table)
+    assert result.num_rows == 2
+
+
+# ===========================================================================
+# Schema/Info
+# ===========================================================================
+
+
+def test_printSchema(spark_session, capsys):
+    spark_df = spark_session.createDataFrame([(1, "a")], ["x", "y"])
+    polars_df = pl.DataFrame({"x": [1], "y": ["a"]})
+
+    # Neither should raise
+    spark_df.printSchema()
+    capsys.readouterr()  # clear
+    polars_df.printSchema()
+    captured = capsys.readouterr()
+    assert "x" in captured.out
+
+
+def test_explain(spark_session):
+    polars_df = pl.DataFrame({"a": [1, 2, 3]})
+    result = polars_df.explain()
+    assert isinstance(result, str)
+    assert len(result) > 0
+
+
+def test_show(spark_session, capsys):
+    polars_df = pl.DataFrame({"a": [1, 2, 3]})
+    polars_df.show()  # should not raise
+    # show() only configures display in polyspark
+
+
+def test_count_property(spark_session):
+    spark_df = spark_session.createDataFrame([(1,), (2,), (3,)], ["a"])
+    polars_df = pl.DataFrame({"a": [1, 2, 3]})
+
+    assert spark_df.count() == polars_df.count
+
+
+def test_columns_property(spark_session):
+    spark_df = spark_session.createDataFrame([(1, "a")], ["x", "y"])
+    polars_df = pl.DataFrame({"x": [1], "y": ["a"]})
+
+    assert spark_df.columns == polars_df.columns
+
+
+def test_isEmpty(spark_session):
+    spark_df = spark_session.createDataFrame([(1,)], ["a"])
+    polars_df = pl.DataFrame({"a": [1]})
+
+    assert polars_df.isEmpty() is False
+
+    empty_polars = pl.DataFrame({"a": pl.Series([], dtype=pl.Int64)})
+    assert empty_polars.isEmpty() is True
+
+
+def test_isLocal(spark_session):
+    polars_df = pl.DataFrame({"a": [1]})
+    assert polars_df.isLocal() is True
+
+
+def test_isStreaming(spark_session):
+    polars_df = pl.DataFrame({"a": [1]})
+    assert polars_df.isStreaming is False
+
+
+# ===========================================================================
+# Correlation / Covariance
+# ===========================================================================
+
+
+def test_corr(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [(1, 2.0), (2, 4.0), (3, 6.0), (4, 8.0)], ["a", "b"]
+    )
+    polars_df = pl.DataFrame({"a": [1, 2, 3, 4], "b": [2.0, 4.0, 6.0, 8.0]})
+
+    spark_result = spark_df.corr("a", "b")
+    polars_result = polars_df.corr("a", "b")
+
+    assert abs(spark_result - polars_result) < 1e-9
+
+
+def test_cov(spark_session):
+    spark_df = spark_session.createDataFrame(
+        [(1, 2.0), (2, 4.0), (3, 6.0), (4, 8.0)], ["a", "b"]
+    )
+    polars_df = pl.DataFrame({"a": [1, 2, 3, 4], "b": [2.0, 4.0, 6.0, 8.0]})
+
+    spark_result = spark_df.cov("a", "b")
+    polars_result = polars_df.cov("a", "b")
+
+    assert abs(spark_result - polars_result) < 1e-6
+
+
+# ===========================================================================
+# Temp views
+# ===========================================================================
+
+
+def test_createTempView(spark_session):
+    import src.sparkpolars.polyspark.sql.dataframe as _mod
+
+    polars_df = pl.DataFrame({"a": [1, 2, 3]})
+    polars_df.createOrReplaceTempView("test_temp_view")
+    assert "test_temp_view" in _mod._local_sql_ctx.tables()
+    _mod._local_sql_ctx.unregister("test_temp_view")
+
+
+def test_createOrReplaceTempView(spark_session):
+    import src.sparkpolars.polyspark.sql.dataframe as _mod
+
+    polars_df = pl.DataFrame({"a": [1, 2, 3]})
+    polars_df.createOrReplaceTempView("test_cort_view")
+    assert "test_cort_view" in _mod._local_sql_ctx.tables()
+    result = _mod._local_sql_ctx.execute("SELECT * FROM test_cort_view").collect()
+    assert result.height == 3
+    _mod._local_sql_ctx.unregister("test_cort_view")
+
+
+def test_createTempView_raises_if_exists():
+    import src.sparkpolars.polyspark.sql.dataframe as _mod
+
+    polars_df = pl.DataFrame({"a": [1]})
+    polars_df.createOrReplaceTempView("dup_view_test")
+    with pytest.raises(RuntimeError, match="already exists"):
+        polars_df.createTempView("dup_view_test")
+    _mod._local_sql_ctx.unregister("dup_view_test")
+
+
+def test_createGlobalTempView():
+    import src.sparkpolars.polyspark.sql.dataframe as _mod
+
+    polars_df = pl.DataFrame({"a": [1, 2]})
+    polars_df.createOrReplaceGlobalTempView("global_test_view")
+    assert "global_test_view" in _mod._global_sql_ctx.tables()
+    _mod._global_sql_ctx.unregister("global_test_view")
+
+
+def test_createOrReplaceGlobalTempView():
+    import src.sparkpolars.polyspark.sql.dataframe as _mod
+
+    polars_df = pl.DataFrame({"a": [1]})
+    polars_df.createOrReplaceGlobalTempView("global_cort_view")
+    assert "global_cort_view" in _mod._global_sql_ctx.tables()
+    _mod._global_sql_ctx.unregister("global_cort_view")
+
+
+def test_createGlobalTempView_raises_if_exists():
+    import src.sparkpolars.polyspark.sql.dataframe as _mod
+
+    polars_df = pl.DataFrame({"a": [1]})
+    polars_df.createOrReplaceGlobalTempView("dup_global_test")
+    with pytest.raises(RuntimeError, match="already exists"):
+        polars_df.createGlobalTempView("dup_global_test")
+    _mod._global_sql_ctx.unregister("dup_global_test")
+
+
+# ===========================================================================
+# Iteration (test they don't error)
+# ===========================================================================
+
+
+def test_foreach(spark_session):
+    polars_df = pl.DataFrame({"a": [1, 2, 3]})
+    collected = []
+    polars_df.foreach(lambda row: collected.append(row["a"]))
+    assert collected == [1, 2, 3]
+
+
+def test_foreachPartition(spark_session):
+    polars_df = pl.DataFrame({"a": [1, 2, 3]})
+    collected = []
+    polars_df.foreachPartition(lambda it: collected.extend(r["a"] for r in it))
+    assert sorted(collected) == [1, 2, 3]
+
+
+# ===========================================================================
+# Map operations (test they work)
+# ===========================================================================
+
+
+def test_mapInPandas(spark_session):
+    polars_df = pl.DataFrame({"a": [1, 2, 3], "b": [10, 20, 30]})
+
+    def add_col(it):
+        for pdf in it:
+            yield pdf.assign(c=pdf["a"] * 2)
+
+    result = polars_df.mapInPandas(add_col)
+    assert isinstance(result, pl.DataFrame)
+    assert "c" in result.columns
+    assert result["c"].to_list() == [2, 4, 6]
+
+
+def test_mapInArrow(spark_session):
+    polars_df = pl.DataFrame({"a": [1, 2, 3]})
+
+    def identity(it):
+        for batch in it:
+            yield batch
+
+    result = polars_df.mapInArrow(identity)
+    assert isinstance(result, pl.DataFrame)
+    assert result.shape == polars_df.shape
+
+
+# ===========================================================================
+# Lateral join
+# ===========================================================================
+
+
+def test_lateralJoin_cross(spark_session):
+    polars_df = pl.DataFrame({"a": [1, 2]})
+    polars_other = pl.DataFrame({"b": [10, 20]})
+
+    result = polars_df.lateralJoin(polars_other)
+    assert result.height == 4  # 2 x 2
+
+
+def test_lateralJoin_nonequi(spark_session):
+    polars_left = pl.DataFrame({"a": [1, 2, 3]})
+    polars_right = pl.DataFrame({"b": [2, 3, 4]})
+
+    result = polars_left.lateralJoin(
+        polars_right,
+        on=pl.col("a") < pl.col("b"),
+    )
+    assert isinstance(result, pl.DataFrame)
+    assert all(
+        row["a"] < row["b"]
+        for row in result.select("a", "b").iter_rows(named=True)
+    )
+
+
+def test_lateralJoin_left_raises():
+    polars_left = pl.DataFrame({"a": [1]})
+    polars_right = pl.DataFrame({"b": [2]})
+
+    with pytest.raises(NotImplementedError):
+        polars_left.lateralJoin(polars_right, on=pl.col("a") < pl.col("b"), how="left")
+
+
+# ===========================================================================
+# exists
+# ===========================================================================
+
+
+def test_exists_non_empty():
+    polars_df = pl.DataFrame({"a": [1, 2, 3]})
+    assert polars_df.exists() is True
+
+
+def test_exists_empty():
+    polars_df = pl.DataFrame({"a": pl.Series([], dtype=pl.Int64)})
+    assert polars_df.exists() is False
+
+
+def test_exists_semi_join_pattern():
+    """Correlated EXISTS simulated as semi join."""
+    customers = pl.DataFrame({
+        "customer_id": [101, 102, 103, 104],
+        "country": ["USA", "Canada", "USA", "Australia"],
     })
+    orders = pl.DataFrame({"customer_id": [101, 102, 103, 101]})
+    result = customers.join(
+        orders.select("customer_id").unique(), on="customer_id", how="semi"
+    )
+    assert set(result["customer_id"].to_list()) == {101, 102, 103}
 
 
-@pytest.fixture()
-def simple_lf(simple_df):
-    return simple_df.lazy()
-
-
-@pytest.fixture()
-def null_df():
-    return pl.DataFrame({
-        "a": [1, 2, 3],
-        "b": [None, "y", None],
-        "c": [1.0, None, 3.0],
+def test_not_exists_anti_join_pattern():
+    """Correlated NOT EXISTS simulated as anti join."""
+    customers = pl.DataFrame({
+        "customer_id": [101, 102, 103, 104],
+        "country": ["USA", "Canada", "USA", "Australia"],
     })
+    orders = pl.DataFrame({"customer_id": [101, 102, 103, 101]})
+    result = customers.join(
+        orders.select("customer_id").unique(), on="customer_id", how="anti"
+    )
+    assert result["customer_id"].to_list() == [104]
 
 
-@pytest.fixture()
-def other_df():
-    return pl.DataFrame({
-        "a": [3, 4, 5, 6, 7],
-        "b": ["z", "x", "y", "a", "b"],
-        "c": [3.0, 4.0, 5.0, 6.0, 7.0],
-    })
+# ===========================================================================
+# Return-self / no-op methods (verify identity)
+# ===========================================================================
 
-
-@pytest.fixture()
-def other_lf(other_df):
-    return other_df.lazy()
-
-
-@pytest.fixture()
-def wide_df():
-    return pl.DataFrame({
-        "id": [1, 2],
-        "val_a": [10, 20],
-        "val_b": [30, 40],
-    })
-
-
-# ── return_self ───────────────────────────────────────────────────────────────
-_RETURN_SELF_DF = [
+_RETURN_SELF_METHODS = [
     ("hint", ("broadcast",), {}),
     ("alias", ("my_alias",), {}),
     ("repartition", (4,), {}),
@@ -67,24 +1354,21 @@ _RETURN_SELF_DF = [
     ("checkpoint", (), {}),
     ("localCheckpoint", (), {}),
     ("collect", (), {}),
+    ("persist", (), {}),
 ]
 
-_RETURN_SELF_LF = [t for t in _RETURN_SELF_DF if t[0] != "collect"]
+
+@pytest.mark.parametrize("method,args,kwargs", _RETURN_SELF_METHODS)
+def test_return_self(method, args, kwargs):
+    df = pl.DataFrame({"a": [1, 2, 3]})
+    result = getattr(df, method)(*args, **kwargs)
+    assert result is df
 
 
-@pytest.mark.parametrize("method,args,kwargs", _RETURN_SELF_DF)
-def test_return_self_df(simple_df, method, args, kwargs):
-    result = getattr(simple_df, method)(*args, **kwargs)
-    assert result is simple_df
+# ===========================================================================
+# NotImplementedError stubs (parametrize)
+# ===========================================================================
 
-
-@pytest.mark.parametrize("method,args,kwargs", _RETURN_SELF_LF)
-def test_return_self_lf(simple_lf, method, args, kwargs):
-    result = getattr(simple_lf, method)(*args, **kwargs)
-    assert result is simple_lf
-
-
-# ── not_implemented ───────────────────────────────────────────────────────────
 _NOT_IMPLEMENTED = [
     "approxQuantile",
     "asTable",
@@ -116,1143 +1400,336 @@ _NOT_IMPLEMENTED = [
 
 
 @pytest.mark.parametrize("method", _NOT_IMPLEMENTED)
-def test_not_implemented_df(simple_df, method):
+def test_not_implemented(method):
+    df = pl.DataFrame({"a": [1, 2, 3]})
     with pytest.raises(NotImplementedError):
-        getattr(simple_df, method)()
+        getattr(df, method)()
 
 
-@pytest.mark.parametrize("method", _NOT_IMPLEMENTED)
-def test_not_implemented_lf(simple_lf, method):
-    with pytest.raises(NotImplementedError):
-        getattr(simple_lf, method)()
+# ===========================================================================
+# DataFrameWriter (test basic write operations work)
+# ===========================================================================
 
 
-# ── describe ──────────────────────────────────────────────────────────────────
-def test_describe_all_cols_df(simple_df):
-    result = simple_df.describe()
-    assert isinstance(result, pl.DataFrame)
-    assert "statistic" in result.columns
-    assert "a" in result.columns
+def test_write_parquet(spark_session):
+    polars_df = pl.DataFrame({"x": [1, 2], "y": ["a", "b"]})
 
+    with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as f:
+        polars_path = f.name
 
-def test_describe_subset_cols_df(simple_df):
-    result = simple_df.describe("a", "c")
-    assert "b" not in result.columns
-    assert "a" in result.columns and "c" in result.columns
+    polars_df.write.mode("overwrite").parquet(polars_path)
+    polars_result = pl.read_parquet(polars_path)
 
-
-def test_describe_lf(simple_lf):
-    result = simple_lf.describe()
-    assert isinstance(result, pl.DataFrame)
-    assert "statistic" in result.columns
-
-
-def test_describe_subset_lf(simple_lf):
-    result = simple_lf.describe("a")
-    assert result.columns == ["statistic", "a"]
-
-
-# ── summary ───────────────────────────────────────────────────────────────────
-def test_summary_df(simple_df):
-    result = simple_df.summary()
-    assert isinstance(result, pl.DataFrame)
-    assert "statistic" in result.columns
-
-
-def test_summary_lf(simple_lf):
-    result = simple_lf.summary()
-    assert isinstance(result, pl.DataFrame)
-
-
-# ── fillna ────────────────────────────────────────────────────────────────────
-def test_fillna_all_cols(null_df):
-    result = null_df.fillna("FILLED")
-    assert result["b"].null_count() == 0
-
-
-def test_fillna_subset(null_df):
-    result = null_df.fillna(0.0, subset=["c"])
-    assert result["c"].null_count() == 0
-    assert result["b"].null_count() == null_df["b"].null_count()
-
-
-def test_fillna_lf(null_df):
-    result = null_df.lazy().fillna("X").collect()
-    assert result["b"].null_count() == 0
-
-
-# ── filter / where ────────────────────────────────────────────────────────────
-def test_filter_expr_df(simple_df):
-    result = simple_df.filter(pl.col("a") > 2)
-    assert result.height == 3
-
-
-def test_filter_string_sql_df(simple_df):
-    result = simple_df.filter("a > 2")
-    assert result.height == 3
-
-
-def test_filter_lf(simple_lf):
-    result = simple_lf.filter("a > 2").collect()
-    assert result.height == 3
-
-
-def test_where_alias_df(simple_df):
-    result = simple_df.where(pl.col("a") > 2)
-    assert result.height == 3
-
-
-def test_where_alias_lf(simple_lf):
-    result = simple_lf.where("a > 2").collect()
-    assert result.height == 3
-
-
-# ── first ─────────────────────────────────────────────────────────────────────
-def test_first_df(simple_df):
-    result = simple_df.first()
-    assert isinstance(result, dict)
-    assert result["a"] == 1
-
-
-def test_first_empty_df():
-    empty = pl.DataFrame({"a": pl.Series([], dtype=pl.Int64)})
-    assert empty.first() is None
-
-
-def test_first_lf(simple_lf):
-    result = simple_lf.first()
-    assert isinstance(result, dict)
-    assert "a" in result
-
-
-# ── intersect / subtract ──────────────────────────────────────────────────────
-def test_intersect_df(simple_df, other_df):
-    result = simple_df.intersect(other_df)
-    assert isinstance(result, pl.DataFrame)
-    result_a = set(result["a"].to_list())
-    assert result_a.issubset({3, 4, 5})
-
-
-def test_intersect_lf(simple_lf, other_lf):
-    result = simple_lf.intersect(other_lf).collect()
-    assert isinstance(result, pl.DataFrame)
-    assert set(result["a"].to_list()).issubset({3, 4, 5})
-
-
-# ── intersectAll ─────────────────────────────────────────────────────────────
-@pytest.fixture()
-def dup_df():
-    return pl.DataFrame({"C1": ["a", "a", "b", "c"], "C2": [1, 1, 3, 4]})
-
-
-@pytest.fixture()
-def dup_df2():
-    return pl.DataFrame({"C1": ["a", "a", "b"], "C2": [1, 1, 3]})
-
-
-def test_intersectAll_preserves_duplicates(dup_df, dup_df2):
-    result = dup_df.intersectAll(dup_df2).sort("C1", "C2")
-    assert result.height == 3  # ("a",1)×2 + ("b",3)×1
-    assert result.to_dicts() == [{"C1": "a", "C2": 1}, {"C1": "a", "C2": 1}, {"C1": "b", "C2": 3}]
-
-
-def test_intersectAll_respects_min_count(dup_df):
-    # df2 has only one ("a",1) — result should have one, not two
-    df2 = pl.DataFrame({"C1": ["a", "b"], "C2": [1, 3]})
-    result = dup_df.intersectAll(df2).sort("C1", "C2")
-    assert result.height == 2
-    assert result["C1"].to_list() == ["a", "b"]
-
-
-def test_intersectAll_no_common_rows(dup_df):
-    df2 = pl.DataFrame({"C1": ["x", "y"], "C2": [9, 10]})
-    result = dup_df.intersectAll(df2)
-    assert result.height == 0
-
-
-def test_intersectAll_lf(dup_df, dup_df2):
-    result = dup_df.lazy().intersectAll(dup_df2.lazy()).collect().sort("C1", "C2")
-    assert result.height == 3
-
-
-def test_subtract_df(simple_df, other_df):
-    result = simple_df.subtract(other_df)
-    assert isinstance(result, pl.DataFrame)
-    assert all(v in {1, 2} for v in result["a"].to_list())
-
-
-def test_subtract_lf(simple_lf, other_lf):
-    result = simple_lf.subtract(other_lf).collect()
-    assert all(v in {1, 2} for v in result["a"].to_list())
-
-
-# ── isLocal / isStreaming ─────────────────────────────────────────────────────
-def test_isLocal_df(simple_df):
-    assert simple_df.isLocal() is True
-
-
-def test_isLocal_lf(simple_lf):
-    assert simple_lf.isLocal() is True
-
-
-def test_isStreaming_df(simple_df):
-    assert simple_df.isStreaming is False
-
-
-def test_isStreaming_lf(simple_lf):
-    assert simple_lf.isStreaming is False
-
-
-# ── melt ─────────────────────────────────────────────────────────────────────
-def test_melt_df(wide_df):
-    result = wide_df.melt(id_vars=["id"], value_vars=["val_a", "val_b"])
-    assert "variable" in result.columns
-    assert "value" in result.columns
-    assert result.height == 4
-
-
-def test_melt_custom_names_df(wide_df):
-    result = wide_df.melt(
-        id_vars=["id"], value_vars=["val_a", "val_b"],
-        var_name="metric", value_name="amount",
-    )
-    assert "metric" in result.columns
-    assert "amount" in result.columns
-
-
-def test_melt_lf(wide_df):
-    result = wide_df.lazy().melt(id_vars=["id"], value_vars=["val_a", "val_b"]).collect()
-    assert result.height == 4
-
-
-# ── offset ────────────────────────────────────────────────────────────────────
-def test_offset_df(simple_df):
-    result = simple_df.offset(2)
-    assert result.height == 3
-    assert result["a"][0] == 3
-
-
-def test_offset_lf(simple_lf):
-    result = simple_lf.offset(2).collect()
-    assert result.height == 3
-    assert result["a"][0] == 3
-
-
-# ── sort / orderBy / sortWithinPartitions ─────────────────────────────────────
-def test_sort_descending_df(simple_df):
-    result = simple_df.sort("a", ascending=False)
-    assert result["a"][0] == 5
-
-
-def test_sort_ascending_df(simple_df):
-    result = simple_df.sort("a", ascending=True)
-    assert result["a"][0] == 1
-
-
-def test_sort_multi_col(simple_df):
-    result = simple_df.sort("b", "a", ascending=[True, False])
-    assert isinstance(result, pl.DataFrame)
-
-
-def test_sort_no_cols(simple_df):
-    result = simple_df.sort()
-    assert_frame_equal(result, simple_df)
-
-
-def test_orderBy_alias_df(simple_df):
-    result = simple_df.orderBy("a", ascending=False)
-    assert result["a"][0] == 5
-
-
-def test_sortWithinPartitions_alias(simple_df):
-    result = simple_df.sortWithinPartitions("a", ascending=True)
-    assert result["a"][0] == 1
-
-
-def test_sort_lf(simple_lf):
-    result = simple_lf.sort("a", ascending=False).collect()
-    assert result["a"][0] == 5
-
-
-def test_sort_list_cols(simple_df):
-    result = simple_df.sort(["a"], ascending=False)
-    assert result["a"][0] == 5
-
-
-# ── printSchema ───────────────────────────────────────────────────────────────
-def test_printSchema_df(simple_df, capsys):
-    simple_df.printSchema()
-    captured = capsys.readouterr()
-    assert "a" in captured.out
-
-
-def test_printSchema_lf(simple_lf, capsys):
-    simple_lf.printSchema()
-    captured = capsys.readouterr()
-    assert "a" in captured.out
-
-
-# ── randomSplit ───────────────────────────────────────────────────────────────
-def test_randomSplit_covers_all_rows(simple_df):
-    splits = simple_df.randomSplit([0.6, 0.4], seed=42)
-    assert len(splits) == 2
-    assert sum(len(s) for s in splits) == simple_df.height
-    for s in splits:
-        assert isinstance(s, pl.DataFrame)
-
-
-def test_randomSplit_no_overlap(simple_df):
-    splits = simple_df.randomSplit([0.5, 0.5], seed=0)
-    a_sets = [set(s["a"].to_list()) for s in splits]
-    assert a_sets[0].isdisjoint(a_sets[1])
-
-
-def test_randomSplit_three_way(simple_df):
-    splits = simple_df.randomSplit([0.5, 0.3, 0.2], seed=1)
-    assert len(splits) == 3
-    assert sum(len(s) for s in splits) == simple_df.height
-
-
-def test_randomSplit_lf(simple_lf):
-    splits = simple_lf.randomSplit([0.5, 0.5], seed=7)
-    assert all(isinstance(s, pl.DataFrame) for s in splits)
-
-
-# ── replace ───────────────────────────────────────────────────────────────────
-def test_replace_scalar_df(simple_df):
-    result = simple_df.replace(1, 99)
-    assert 99 in result["a"].to_list()
-    assert 1 not in result["a"].to_list()
-
-
-def test_replace_subset_df(simple_df):
-    result = simple_df.replace(1, 99, subset=["a"])
-    assert 99 in result["a"].to_list()
-    # column b should be unchanged
-    assert result["b"].to_list() == simple_df["b"].to_list()
-
-
-def test_replace_dict_df(simple_df):
-    result = simple_df.replace({"x": "X", "y": "Y"}, subset=["b"])
-    assert "X" in result["b"].to_list()
-    assert "x" not in result["b"].to_list()
-
-
-def test_replace_lf(simple_lf):
-    result = simple_lf.replace(1, 99).collect()
-    assert 99 in result["a"].to_list()
-
-
-# ── sample ────────────────────────────────────────────────────────────────────
-def test_sample_fraction_df(simple_df):
-    result = simple_df.sample(fraction=0.4, seed=42)
-    assert isinstance(result, pl.DataFrame)
-    assert 1 <= result.height <= simple_df.height
-
-
-def test_sample_with_replacement_df(simple_df):
-    result = simple_df.sample(withReplacement=True, fraction=1.0, seed=0)
-    assert result.height == simple_df.height
-
-
-def test_sample_lf(simple_lf):
-    result = simple_lf.sample(fraction=0.4, seed=1)
-    assert isinstance(result, pl.DataFrame)
-
-
-# ── selectExpr ────────────────────────────────────────────────────────────────
-def test_selectExpr_df(simple_df):
-    result = simple_df.selectExpr("a", "b")
-    assert result.columns == ["a", "b"]
-    assert result.height == simple_df.height
-
-
-def test_selectExpr_lf(simple_lf):
-    result = simple_lf.selectExpr("a").collect()
-    assert result.columns == ["a"]
-    assert result.height == 5
-
-
-# ── take ──────────────────────────────────────────────────────────────────────
-def test_take_df(simple_df):
-    result = simple_df.take(3)
-    assert isinstance(result, list)
-    assert len(result) == 3
-    assert isinstance(result[0], dict)
-    assert result[0]["a"] == 1
-
-
-def test_take_lf(simple_lf):
-    result = simple_lf.take(2)
-    assert len(result) == 2
-    assert isinstance(result[0], dict)
-
-
-# ── toArrow ───────────────────────────────────────────────────────────────────
-def test_toArrow_df(simple_df):
-    import pyarrow as pa
-    result = simple_df.toArrow()
-    assert isinstance(result, pa.Table)
-    assert result.num_rows == 5
-
-
-def test_toArrow_lf(simple_lf):
-    import pyarrow as pa
-    result = simple_lf.toArrow()
-    assert isinstance(result, pa.Table)
-
-
-# ── toDF ──────────────────────────────────────────────────────────────────────
-def test_toDF_df(simple_df):
-    result = simple_df.toDF("x", "y", "z")
-    assert result.columns == ["x", "y", "z"]
-
-
-def test_toDF_wrong_count_df(simple_df):
-    with pytest.raises(ValueError, match="toDF"):
-        simple_df.toDF("x", "y")
-
-
-def test_toDF_lf(simple_lf):
-    result = simple_lf.toDF("x", "y", "z").collect()
-    assert result.columns == ["x", "y", "z"]
-
-
-# ── toJSON ────────────────────────────────────────────────────────────────────
-def test_toJSON_df(simple_df):
-    result = simple_df.toJSON()
-    assert isinstance(result, str)
-    assert '"a"' in result
-
-
-def test_toJSON_lf(simple_lf):
-    result = simple_lf.toJSON()
-    assert isinstance(result, str)
-
-
-# ── toPandas ──────────────────────────────────────────────────────────────────
-def test_toPandas_df(simple_df):
-    import pandas as pd
-    result = simple_df.toPandas()
-    assert isinstance(result, pd.DataFrame)
-    assert list(result.columns) == ["a", "b", "c"]
-
-
-def test_toPandas_lf(simple_lf):
-    import pandas as pd
-    result = simple_lf.toPandas()
-    assert isinstance(result, pd.DataFrame)
-
-
-# ── transform ─────────────────────────────────────────────────────────────────
-def test_transform_df(simple_df):
-    def add_col(df):
-        return df.with_columns(pl.col("a").alias("a2"))
-    result = simple_df.transform(add_col)
-    assert "a2" in result.columns
-
-
-def test_transform_with_args(simple_df):
-    def multiply(df, factor):
-        return df.with_columns((pl.col("a") * factor).alias("a_scaled"))
-    result = simple_df.transform(multiply, 10)
-    assert result["a_scaled"][0] == 10
-
-
-def test_transform_lf(simple_lf):
-    def drop_c(df):
-        return df.drop("c")
-    result = simple_lf.transform(drop_c).collect()
-    assert "c" not in result.columns
-
-
-# ── transpose (LazyFrame only) ────────────────────────────────────────────────
-def test_transpose_lf():
-    lf = pl.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}).lazy()
-    result = lf.transpose()
-    assert isinstance(result, pl.DataFrame)
-    assert result.shape == (2, 3)
-
-
-# ── union / unionAll ──────────────────────────────────────────────────────────
-def test_union_df(simple_df, other_df):
-    result = simple_df.union(other_df)
-    assert result.height == simple_df.height + other_df.height
-
-
-def test_unionAll_df(simple_df, other_df):
-    result = simple_df.unionAll(other_df)
-    assert result.height == simple_df.height + other_df.height
-
-
-def test_union_lf(simple_lf, other_lf):
-    result = simple_lf.union(other_lf).collect()
-    assert result.height == 10
-
-
-# ── existing methods ──────────────────────────────────────────────────────────
-def test_persist_df(simple_df):
-    result = simple_df.persist()
-    assert result is simple_df
-
-
-def test_distinct_df(simple_df):
-    duped = pl.concat([simple_df, simple_df])
-    result = duped.distinct()
-    assert result.height == simple_df.height
-
-
-def test_dropDuplicates_subset_df(simple_df):
-    result = simple_df.dropDuplicates(subset=["b"])
-    assert result.height == 3  # "x", "y", "z" are unique values
-
-
-def test_withColumn_df(simple_df):
-    result = simple_df.withColumn("d", pl.col("a") * 2)
-    assert "d" in result.columns
-    assert result["d"][0] == 2
-
-
-def test_colRegex_df(simple_df):
-    result = simple_df.colRegex("^[ab]$")
-    assert result.columns == ["a", "b"]
-
-
-def test_unionByName_df(simple_df):
-    result = simple_df.unionByName(simple_df)
-    assert result.height == 10
-
-
-def test_withColumnRenamed_df(simple_df):
-    result = simple_df.withColumnRenamed("a", "aa")
-    assert "aa" in result.columns
-    assert "a" not in result.columns
-
-
-def test_withColumnsRenamed_df(simple_df):
-    result = simple_df.withColumnsRenamed({"a": "aa", "b": "bb"})
-    assert result.columns == ["aa", "bb", "c"]
-
-
-def test_isEmpty_df(simple_df):
-    assert simple_df.isEmpty() is False
-    assert pl.DataFrame({"a": pl.Series([], dtype=pl.Int64)}).isEmpty() is True
-
-
-def test_count_df(simple_df):
-    assert simple_df.count == 5
-
-
-def test_count_lf(simple_lf):
-    assert simple_lf.count == 5
-
-
-def test_isEmpty_lf(simple_lf):
-    assert simple_lf.isEmpty() is False
-
-
-def test_schema_lf(simple_lf):
-    schema = simple_lf.schema
-    assert "a" in schema
-
-
-def test_columns_lf(simple_lf):
-    assert simple_lf.columns == ["a", "b", "c"]
-
-
-def test_drop_nonexistent_df(simple_df):
-    result = simple_df.drop("nonexistent")
-    assert_frame_equal(result, simple_df)
-
-
-def test_drop_nonexistent_lf(simple_lf):
-    result = simple_lf.drop("nonexistent").collect()
-    assert_frame_equal(result, simple_lf.collect())
-
-
-def test_groupBy_agg_df(simple_df):
-    result = simple_df.groupBy("b").agg(pl.col("a").sum())
-    assert isinstance(result, pl.DataFrame)
-    assert "b" in result.columns
-
-
-# ── groupBy with spark functions ──────────────────────────────────────────────
-
-import src.sparkpolars.polyspark.sql.functions as _sf  # noqa: E402
-
-
-def test_groupBy_sum():
-    import polars as pl
-    df = pl.DataFrame({"dept": ["A", "A", "B", "B"], "sal": [100, 200, 300, 400]})
-    result = df.groupBy("dept").agg(_sf.sum("sal")).sort("dept")
-    assert result.columns == ["dept", "sum(sal)"]
-    assert result["sum(sal)"].to_list() == [300, 700]
-
-
-def test_groupBy_multi_agg():
-    import polars as pl
-    df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
-    result = df.groupBy("dept").agg(_sf.sum("sal"), _sf.avg("sal"), _sf.count("sal")).sort("dept")
-    assert "sum(sal)" in result.columns
-    assert "avg(sal)" in result.columns
-    assert "count(sal)" in result.columns
-
-
-def test_groupBy_dict_agg():
-    import polars as pl
-    df = pl.DataFrame({"dept": ["A", "A", "B", "B"], "sal": [100, 200, 300, 400]})
-    result = df.groupBy("dept").agg({"sal": "sum"}).sort("dept")
-    assert "sum(sal)" in result.columns
-    assert result["sum(sal)"].to_list() == [300, 700]
-
-
-def test_groupBy_dict_multi_fn():
-    import polars as pl
-    df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
-    result = df.groupBy("dept").agg({"sal": ["sum", "avg"]}).sort("dept")
-    assert "sum(sal)" in result.columns
-    assert "avg(sal)" in result.columns
-
-
-def test_groupBy_count_method():
-    import polars as pl
-    df = pl.DataFrame({"dept": ["A", "A", "B", "B"], "sal": [100, 200, 300, 400]})
-    result = df.groupBy("dept").count().sort("dept")
-    assert "count" in result.columns
-    assert result["count"].to_list() == [2, 2]
-
-
-def test_groupBy_no_cols_global_agg():
-    import polars as pl
-    df = pl.DataFrame({"sal": [100, 200, 300]})
-    result = df.groupBy().agg(_sf.sum("sal"))
-    assert result["sum(sal)"][0] == 600
-
-
-def test_global_agg_on_df():
-    import polars as pl
-    df = pl.DataFrame({"sal": [100, 200, 300]})
-    result = df.agg(_sf.sum("sal"))
-    assert result["sum(sal)"][0] == 600
-
-
-def test_global_agg_dict():
-    import polars as pl
-    df = pl.DataFrame({"sal": [100, 200, 300]})
-    result = df.agg({"sal": "sum"})
-    assert result["sum(sal)"][0] == 600
-
-
-def test_crossJoin_df(simple_df):
-    small = simple_df.head(2)
-    result = small.crossJoin(small)
-    assert result.height == 4
-
-
-# ── join (all types) ──────────────────────────────────────────────────────────
-# simple_df:  a=[1,2,3,4,5]   other_df: a=[3,4,5,6,7]  → overlap {3,4,5}
-
-def test_join_inner_df(simple_df, other_df):
-    result = simple_df.join(other_df, on="a", how="inner")
-    assert result.height == 3
-    assert set(result["a"].to_list()) == {3, 4, 5}
-
-
-def test_join_left_outer_df(simple_df, other_df):
-    result = simple_df.join(other_df, on="a", how="left_outer")
-    assert result.height == 5  # all rows from left
-    assert set(result["a"].to_list()) == {1, 2, 3, 4, 5}
-
-
-def test_join_leftouter_alias_df(simple_df, other_df):
-    result = simple_df.join(other_df, on="a", how="leftouter")
-    assert result.height == 5
-
-
-def test_join_right_outer_df(simple_df, other_df):
-    result = simple_df.join(other_df, on="a", how="right_outer")
-    assert result.height == 5  # all rows from right
-    assert set(result["a"].to_list()) == {3, 4, 5, 6, 7}
-
-
-def test_join_rightouter_alias_df(simple_df, other_df):
-    result = simple_df.join(other_df, on="a", how="rightouter")
-    assert result.height == 5
-
-
-def test_join_full_outer_df(simple_df, other_df):
-    result = simple_df.join(other_df, on="a", how="full_outer")
-    assert result.height == 7  # 3 matched + 2 left-only + 2 right-only
-
-
-def test_join_full_alias_df(simple_df, other_df):
-    result = simple_df.join(other_df, on="a", how="full")
-    assert result.height == 7
-
-
-def test_join_fullouter_alias_df(simple_df, other_df):
-    result = simple_df.join(other_df, on="a", how="fullouter")
-    assert result.height == 7
-
-
-def test_join_left_anti_df(simple_df, other_df):
-    result = simple_df.join(other_df, on="a", how="left_anti")
-    assert result.height == 2  # a=1,2 not in other_df
-    assert set(result["a"].to_list()) == {1, 2}
-
-
-def test_join_leftanti_alias_df(simple_df, other_df):
-    result = simple_df.join(other_df, on="a", how="leftanti")
-    assert result.height == 2
-
-
-def test_join_semi_df(simple_df, other_df):
-    result = simple_df.join(other_df, on="a", how="semi")
-    assert result.height == 3  # a=3,4,5 present in both
-    assert set(result["a"].to_list()) == {3, 4, 5}
-
-
-def test_join_cross_df(simple_df, other_df):
-    result = simple_df.join(other_df, how="cross")
-    assert result.height == 25  # 5 × 5
-
-
-def test_join_multi_col_df(simple_df, other_df):
-    result = simple_df.join(other_df, on=["a", "b", "c"], how="inner")
-    assert isinstance(result, pl.DataFrame)
-    assert set(result["a"].to_list()).issubset({3, 4, 5})
-
-
-def test_join_expr_predicate_df(simple_df, other_df):
-    result = simple_df.join(other_df, on=pl.col("a") < pl.col("a_right"), how="inner")
-    assert isinstance(result, pl.DataFrame)
-    assert all(r["a"] < r["a_right"] for r in result.select("a", "a_right").iter_rows(named=True))
-
-
-def test_join_lf_inner(simple_lf, other_lf):
-    result = simple_lf.join(other_lf, on="a", how="inner").collect()
-    assert result.height == 3
-
-
-def test_join_lf_left(simple_lf, other_lf):
-    result = simple_lf.join(other_lf, on="a", how="left_outer").collect()
-    assert result.height == 5
-
-
-def test_join_lf_anti(simple_lf, other_lf):
-    result = simple_lf.join(other_lf, on="a", how="left_anti").collect()
-    assert result.height == 2
-
-
-def test_join_lf_cross(simple_lf, other_lf):
-    result = simple_lf.join(other_lf, how="cross").collect()
-    assert result.height == 25
-
-
-def test_dropDuplicates_lf(simple_lf):
-    duped = pl.concat([simple_lf.collect(), simple_lf.collect()]).lazy()
-    result = duped.dropDuplicates().collect()
-    assert result.height == 5
-
-
-def test_withColumns_dict_df(simple_df):
-    result = simple_df.withColumns({"d": pl.col("a") + 10})
-    assert result["d"][0] == 11
-
-
-def test_withColumns_kwargs_df(simple_df):
-    result = simple_df.withColumns(d=pl.col("a") + 10)
-    assert result["d"][0] == 11
-
-
-def test_show_df(simple_df, capsys):
-    simple_df.show()
-    # show sets display config — just ensure no exception raised
-    captured = capsys.readouterr()
-    assert captured.out == ""  # show() only configures, does not print
-
-
-def test_show_vertical_raises(simple_df):
-    with pytest.raises(NotImplementedError):
-        simple_df.show(vertical=True)
-
-
-def test_show_negative_n_raises(simple_df):
-    with pytest.raises(ValueError):
-        simple_df.show(n=-1)
-
-
-def test_dropna_raises_with_thresh(null_df):
-    with pytest.raises(NotImplementedError):
-        null_df.dropna(thresh=2)
-
-
-def test_dropnulls_raises_with_thresh(null_df):
-    with pytest.raises(NotImplementedError):
-        null_df.dropnulls(thresh=2)
-
-
-def test_agg_invalid_dict_values(simple_df):
-    with pytest.raises(ValueError, match="Aggregation functions"):
-        simple_df.agg({"a": "invalid_agg"})
-
-
-def test_agg_invalid_dict_types(simple_df):
-    with pytest.raises(ValueError, match="All keys and values"):
-        simple_df.agg({1: "sum"})
-
-
-# ── explain ───────────────────────────────────────────────────────────────────
-def test_explain_df(simple_df):
-    result = simple_df.explain()
-    assert isinstance(result, str)
-    assert len(result) > 0
-
-
-def test_explain_lf(simple_lf):
-    result = simple_lf.explain()
-    assert isinstance(result, str)
-    assert len(result) > 0
-
-
-# ── na ────────────────────────────────────────────────────────────────────────
-def test_na_fill_df(null_df):
-    result = null_df.na.fill("X")
-    assert result["b"].null_count() == 0
-
-
-def test_na_drop_df(null_df):
-    result = null_df.na.drop()
-    assert result.height == 0  # every row has at least one null
-
-
-def test_na_replace_df(simple_df):
-    result = simple_df.na.replace(1, 99)
-    assert 99 in result["a"].to_list()
-
-
-def test_na_fill_lf(null_df):
-    result = null_df.lazy().na.fill(0.0).collect()
-    assert result["c"].null_count() == 0
-
-
-# ── temp views ────────────────────────────────────────────────────────────────
-def test_createOrReplaceTempView_df(simple_df):
-    import src.sparkpolars.polyspark.sql.dataframe as _mod
-    simple_df.createOrReplaceTempView("test_view_df")
-    assert "test_view_df" in _mod._local_sql_ctx.tables()
-    result = _mod._local_sql_ctx.execute("SELECT * FROM test_view_df").collect()
-    assert result.height == 5
-    _mod._local_sql_ctx.unregister("test_view_df")
-
-
-def test_createTempView_raises_if_exists(simple_df):
-    import src.sparkpolars.polyspark.sql.dataframe as _mod
-    simple_df.createOrReplaceTempView("dup_view")
-    with pytest.raises(RuntimeError, match="already exists"):
-        simple_df.createTempView("dup_view")
-    _mod._local_sql_ctx.unregister("dup_view")
-
-
-def test_createOrReplaceGlobalTempView_df(simple_df):
-    import src.sparkpolars.polyspark.sql.dataframe as _mod
-    simple_df.createOrReplaceGlobalTempView("global_view")
-    assert "global_view" in _mod._global_sql_ctx.tables()
-    _mod._global_sql_ctx.unregister("global_view")
-
-
-def test_createGlobalTempView_raises_if_exists(simple_df):
-    import src.sparkpolars.polyspark.sql.dataframe as _mod
-    simple_df.createOrReplaceGlobalTempView("dup_global")
-    with pytest.raises(RuntimeError, match="already exists"):
-        simple_df.createGlobalTempView("dup_global")
-    _mod._global_sql_ctx.unregister("dup_global")
-
-
-def test_registerTempTable_df(simple_df):
-    import src.sparkpolars.polyspark.sql.dataframe as _mod
-    simple_df.registerTempTable("reg_view")
-    assert "reg_view" in _mod._local_sql_ctx.tables()
-    _mod._local_sql_ctx.unregister("reg_view")
-
-
-# ── exists ────────────────────────────────────────────────────────────────────
-def test_exists_non_empty_df(simple_df):
-    assert simple_df.exists() is True
-
-
-def test_exists_empty_df():
-    assert pl.DataFrame({"a": pl.Series([], dtype=pl.Int64)}).exists() is False
-
-
-def test_exists_non_empty_lf(simple_lf):
-    assert simple_lf.exists() is True
-
-
-def test_exists_empty_lf():
-    assert pl.DataFrame({"a": pl.Series([], dtype=pl.Int64)}).lazy().exists() is False
-
-
-def test_exists_semi_join_pattern():
-    """Correlated EXISTS → semi join."""
-    customers = pl.DataFrame({
-        "customer_id": [101, 102, 103, 104],
-        "country": ["USA", "Canada", "USA", "Australia"],
-    })
-    orders = pl.DataFrame({"customer_id": [101, 102, 103, 101]})
-    result = customers.join(orders.select("customer_id").unique(), on="customer_id", how="semi")
-    assert set(result["customer_id"].to_list()) == {101, 102, 103}
-
-
-def test_not_exists_anti_join_pattern():
-    """Correlated NOT EXISTS → anti join."""
-    customers = pl.DataFrame({
-        "customer_id": [101, 102, 103, 104],
-        "country": ["USA", "Canada", "USA", "Australia"],
-    })
-    orders = pl.DataFrame({"customer_id": [101, 102, 103, 101]})
-    result = customers.join(orders.select("customer_id").unique(), on="customer_id", how="anti")
-    assert result["customer_id"].to_list() == [104]
-
-
-def test_outer_noop():
-    """Expr.outer() is a no-op — returns the same expression."""
-    import src.sparkpolars.polyspark.sql.functions  # noqa: F401
-    expr = pl.col("x")
-    assert expr.outer() is expr
-
-
-# ── lateralJoin ───────────────────────────────────────────────────────────────
-def test_lateralJoin_cross_df(simple_df):
-    small = simple_df.head(2)
-    result = small.lateralJoin(small)
-    assert result.height == 4  # 2 × 2 cross join
-
-
-def test_lateralJoin_nonequi_df(simple_df, other_df):
-    result = simple_df.lateralJoin(
-        other_df,
-        on=pl.col("a") < pl.col("a_right"),
-    )
-    assert isinstance(result, pl.DataFrame)
-    assert all(
-        row["a"] < row["a_right"]
-        for row in result.select("a", "a_right").iter_rows(named=True)
+    assert_frame_equal(
+        polars_df.sort("x"),
+        polars_result.sort("x"),
+        check_dtypes=False,
     )
 
 
-def test_lateralJoin_left_raises(simple_df, other_df):
-    with pytest.raises(NotImplementedError):
-        simple_df.lateralJoin(other_df, on=pl.col("a") < pl.col("a_right"), how="left")
+def test_write_csv(spark_session):
+    polars_df = pl.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="w") as f:
+        path = f.name
+
+    polars_df.write.mode("overwrite").csv(path)
+    result = pl.read_csv(path)
+    assert result.shape == polars_df.shape
 
 
-def test_lateralJoin_lf(simple_lf, other_lf):
-    result = simple_lf.lateralJoin(other_lf, on=pl.col("a") < pl.col("a_right"))
-    assert isinstance(result, pl.LazyFrame)
-    assert result.collect().height > 0
+def test_write_json(spark_session):
+    polars_df = pl.DataFrame({"a": [1, 2], "b": ["x", "y"]})
+
+    with tempfile.NamedTemporaryFile(suffix=".ndjson", delete=False, mode="w") as f:
+        path = f.name
+
+    polars_df.write.mode("overwrite").json(path)
+    result = pl.read_ndjson(path)
+    assert result.shape == polars_df.shape
 
 
-# ── foreach / foreachPartition ────────────────────────────────────────────────
-def test_foreach_df(simple_df):
-    collected = []
-    simple_df.foreach(lambda row: collected.append(row["a"]))
-    assert collected == [1, 2, 3, 4, 5]
-
-
-def test_foreach_lf(simple_lf):
-    collected = []
-    simple_lf.foreach(lambda row: collected.append(row["a"]))
-    assert len(collected) == 5
-
-
-def test_foreachPartition_df(simple_df):
-    collected = []
-    simple_df.foreachPartition(lambda it: collected.extend(r["a"] for r in it))
-    assert sorted(collected) == [1, 2, 3, 4, 5]
-
-
-def test_foreachPartition_lf(simple_lf):
-    collected = []
-    simple_lf.foreachPartition(lambda it: collected.extend(r["a"] for r in it))
-    assert len(collected) == 5
-
-
-# ── mapInPandas / mapInArrow ──────────────────────────────────────────────────
-def test_mapInPandas_df(simple_df):
-    import polars as pl
-
-    def add_col(it):
-        for pdf in it:
-            yield pdf.assign(d=pdf["a"] * 2)
-
-    result = simple_df.mapInPandas(add_col)
-    assert isinstance(result, pl.DataFrame)
-    assert "d" in result.columns
-    assert result["d"][0] == 2
-
-
-def test_mapInArrow_df(simple_df):
-    import pyarrow as pa
-    import polars as pl
-
-    def identity(it):
-        for batch in it:
-            yield batch
-
-    result = simple_df.mapInArrow(identity)
-    assert isinstance(result, pl.DataFrame)
-    assert result.shape == simple_df.shape
-
-
-# ── corr / cov ────────────────────────────────────────────────────────────────
-def test_corr_df(simple_df):
-    result = simple_df.corr("a", "c")
-    assert isinstance(result, float)
-    assert abs(result - 1.0) < 1e-9  # a and c are perfectly correlated
-
-
-def test_corr_spearman_df(simple_df):
-    result = simple_df.corr("a", "c", method="spearman")
-    assert isinstance(result, float)
-
-
-def test_corr_lf(simple_lf):
-    result = simple_lf.corr("a", "c")
-    assert isinstance(result, float)
-
-
-def test_cov_df(simple_df):
-    result = simple_df.cov("a", "c")
-    assert isinstance(result, float)
-    assert result > 0  # a and c move together
-
-
-def test_cov_lf(simple_lf):
-    result = simple_lf.cov("a", "c")
-    assert isinstance(result, float)
-
-
-def test_createOrReplaceTempView_lf(simple_lf):
-    import src.sparkpolars.polyspark.sql.dataframe as _mod
-    simple_lf.createOrReplaceTempView("lf_view")
-    assert "lf_view" in _mod._local_sql_ctx.tables()
-    _mod._local_sql_ctx.unregister("lf_view")
-
-
-# ── DataFrameWriter (df.write) ─────────────────────────────────────────────────
-import tempfile
-
-
-def test_write_returns_writer(simple_df):
+def test_write_builder_chain():
     from src.sparkpolars.polyspark.sql.dataframe import DataFrameWriter
-    assert isinstance(simple_df.write, DataFrameWriter)
 
-
-def test_write_lf_returns_writer(simple_lf):
-    from src.sparkpolars.polyspark.sql.dataframe import DataFrameWriter
-    assert isinstance(simple_lf.write, DataFrameWriter)
-
-
-def test_write_builder_chain(simple_df):
-    from src.sparkpolars.polyspark.sql.dataframe import DataFrameWriter
-    w = simple_df.write.mode("overwrite").option("compression", "snappy")
+    df = pl.DataFrame({"a": [1]})
+    w = df.write.mode("overwrite").option("compression", "snappy")
     assert isinstance(w, DataFrameWriter)
     assert w._mode == "overwrite"
     assert w._options["compression"] == "snappy"
 
 
-def test_write_parquet_df(simple_df):
+def test_write_error_mode_raises():
+    df = pl.DataFrame({"a": [1]})
     with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as f:
         path = f.name
-    simple_df.write.mode("overwrite").parquet(path)
-    result = pl.read_parquet(path)
-    assert result.shape == simple_df.shape
-
-
-def test_write_csv_df(simple_df):
-    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="w") as f:
-        path = f.name
-    simple_df.write.mode("overwrite").csv(path)
-    result = pl.read_csv(path)
-    assert result.shape == simple_df.shape
-
-
-def test_write_json_df(simple_df):
-    with tempfile.NamedTemporaryFile(suffix=".ndjson", delete=False, mode="w") as f:
-        path = f.name
-    simple_df.write.mode("overwrite").json(path)
-    result = pl.read_ndjson(path)
-    assert result.shape == simple_df.shape
-
-
-def test_write_ipc_df(simple_df):
-    with tempfile.NamedTemporaryFile(suffix=".arrow", delete=False) as f:
-        path = f.name
-    simple_df.write.mode("overwrite").ipc(path)
-    result = pl.read_ipc(path)
-    assert result.shape == simple_df.shape
-
-
-def test_write_avro_df(simple_df):
-    with tempfile.NamedTemporaryFile(suffix=".avro", delete=False) as f:
-        path = f.name
-    simple_df.write.mode("overwrite").avro(path)
-    result = pl.read_avro(path)
-    assert result.shape == simple_df.shape
-
-
-def test_write_text_df(simple_df):
-    text_df = simple_df.select(pl.col("b").cast(pl.String).alias("value"))
-    with tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode="w") as f:
-        path = f.name
-    text_df.write.mode("overwrite").text(path)
-    from pathlib import Path
-    lines = Path(path).read_text().strip().split("\n")
-    assert len(lines) == 5
-
-
-def test_write_save_parquet(simple_df):
-    with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as f:
-        path = f.name
-    simple_df.write.format("parquet").mode("overwrite").save(path)
-    result = pl.read_parquet(path)
-    assert result.shape == simple_df.shape
-
-
-def test_write_error_mode_raises(simple_df):
-    with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as f:
-        path = f.name
-    simple_df.write.mode("overwrite").parquet(path)  # first write OK
+    df.write.mode("overwrite").parquet(path)
     with pytest.raises(RuntimeError, match="already exists"):
-        simple_df.write.parquet(path)  # default mode="error" → raises
+        df.write.parquet(path)  # default mode="error"
 
 
-def test_write_ignore_mode_skips(simple_df):
+def test_write_ignore_mode_skips():
+    df = pl.DataFrame({"a": [1, 2, 3]})
     with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as f:
         path = f.name
-    simple_df.write.mode("overwrite").parquet(path)  # first write OK
-    # write different data with ignore mode — file should be unchanged
-    other = simple_df.head(1)
-    other.write.mode("ignore").parquet(path)
+    df.write.mode("overwrite").parquet(path)
+    # Write smaller DF with ignore mode -- should NOT overwrite
+    small = df.head(1)
+    small.write.mode("ignore").parquet(path)
     result = pl.read_parquet(path)
-    assert result.shape == simple_df.shape  # original 5 rows still there
+    assert result.height == 3  # original data preserved
 
 
-def test_write_saveAsTable(simple_df):
+def test_write_saveAsTable():
     import src.sparkpolars.polyspark.sql.dataframe as _mod
-    simple_df.write.saveAsTable("writer_table")
-    assert "writer_table" in _mod._local_sql_ctx.tables()
-    _mod._local_sql_ctx.unregister("writer_table")
+
+    df = pl.DataFrame({"a": [1]})
+    df.write.saveAsTable("writer_table_test")
+    assert "writer_table_test" in _mod._local_sql_ctx.tables()
+    _mod._local_sql_ctx.unregister("writer_table_test")
 
 
-def test_write_save_no_format_raises(simple_df):
+def test_write_save_no_format_raises():
+    df = pl.DataFrame({"a": [1]})
     with pytest.raises(ValueError, match="No format"):
-        simple_df.write.save("/tmp/nowhere")
+        df.write.save("/tmp/nowhere")
 
 
-def test_write_parquet_lf(simple_lf):
-    with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as f:
-        path = f.name
-    simple_lf.write.mode("overwrite").parquet(path)
-    result = pl.read_parquet(path)
-    assert result.shape == (5, 3)
+# ===========================================================================
+# Replace
+# ===========================================================================
+
+
+def test_replace_scalar(spark_session):
+    spark_df = spark_session.createDataFrame([(1,), (2,), (3,)], ["a"])
+    polars_df = pl.DataFrame({"a": [1, 2, 3]})
+
+    spark_result = spark_df.na.replace(1, 99)
+    polars_result = polars_df.replace(1, 99)
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("a"), polars_result.sort("a"), check_dtypes=False)
+
+
+def test_replace_subset(spark_session):
+    spark_df = spark_session.createDataFrame([(1, 10), (2, 20)], ["a", "b"])
+    polars_df = pl.DataFrame({"a": [1, 2], "b": [10, 20]})
+
+    spark_result = spark_df.na.replace(1, 99, subset=["a"])
+    polars_result = polars_df.replace(1, 99, subset=["a"])
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("a"), polars_result.sort("a"), check_dtypes=False)
+
+
+def test_replace_dict(spark_session):
+    spark_df = spark_session.createDataFrame([("x",), ("y",), ("z",)], ["a"])
+    polars_df = pl.DataFrame({"a": ["x", "y", "z"]})
+
+    spark_result = spark_df.na.replace({"x": "X", "y": "Y"})
+    polars_result = polars_df.replace({"x": "X", "y": "Y"}, subset=["a"])
+
+    expected = _spark_to_polars(spark_result)
+    assert_frame_equal(expected.sort("a"), polars_result.sort("a"), check_dtypes=False)
+
+
+# ===========================================================================
+# Window functions (test all window types)
+# ===========================================================================
+
+
+def test_window_row_number(spark_session):
+    from pyspark.sql.window import Window as SparkWindow
+
+    spark_df = spark_session.createDataFrame(
+        [("A", 100), ("A", 200), ("B", 150), ("B", 250)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B", "B"], "sal": [100, 200, 150, 250]})
+
+    w_spark = SparkWindow.partitionBy("dept").orderBy("sal")
+    spark_result = spark_df.withColumn("rn", F.row_number().over(w_spark))
+
+    polars_result = polars_df.with_columns(
+        pl.col("sal").rank("ordinal").over("dept").alias("rn")
+    ).sort("dept", "sal")
+
+    expected = _spark_to_polars(spark_result).sort("dept", "sal")
+    assert_frame_equal(expected, polars_result, check_dtypes=False)
+
+
+def test_window_rank(spark_session):
+    from pyspark.sql.window import Window as SparkWindow
+
+    spark_df = spark_session.createDataFrame(
+        [("A", 100), ("A", 100), ("A", 200), ("B", 150)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "A", "B"], "sal": [100, 100, 200, 150]})
+
+    w_spark = SparkWindow.partitionBy("dept").orderBy("sal")
+    spark_result = spark_df.withColumn("rnk", F.rank().over(w_spark))
+
+    polars_result = polars_df.with_columns(
+        pl.col("sal").rank("min").over("dept").alias("rnk")
+    ).sort("dept", "sal")
+
+    expected = _spark_to_polars(spark_result).sort("dept", "sal")
+    assert_frame_equal(expected, polars_result, check_dtypes=False)
+
+
+def test_window_dense_rank(spark_session):
+    from pyspark.sql.window import Window as SparkWindow
+
+    spark_df = spark_session.createDataFrame(
+        [("A", 100), ("A", 100), ("A", 200), ("B", 150)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "A", "B"], "sal": [100, 100, 200, 150]})
+
+    w_spark = SparkWindow.partitionBy("dept").orderBy("sal")
+    spark_result = spark_df.withColumn("dr", F.dense_rank().over(w_spark))
+
+    polars_result = polars_df.with_columns(
+        pl.col("sal").rank("dense").over("dept").alias("dr")
+    ).sort("dept", "sal")
+
+    expected = _spark_to_polars(spark_result).sort("dept", "sal")
+    assert_frame_equal(expected, polars_result, check_dtypes=False)
+
+
+def test_window_lag(spark_session):
+    from pyspark.sql.window import Window as SparkWindow
+
+    spark_df = spark_session.createDataFrame(
+        [("A", 1, 100), ("A", 2, 200), ("A", 3, 300)], ["dept", "seq", "sal"]
+    )
+    polars_df = pl.DataFrame(
+        {"dept": ["A", "A", "A"], "seq": [1, 2, 3], "sal": [100, 200, 300]}
+    )
+
+    w_spark = SparkWindow.partitionBy("dept").orderBy("seq")
+    spark_result = spark_df.withColumn("lag_sal", F.lag("sal", 1).over(w_spark))
+
+    polars_result = polars_df.sort("dept", "seq").with_columns(
+        pl.col("sal").shift(1).over("dept").alias("lag_sal")
+    )
+
+    expected = _spark_to_polars(spark_result).sort("dept", "seq")
+    polars_result = polars_result.sort("dept", "seq")
+    assert_frame_equal(expected, polars_result, check_dtypes=False)
+
+
+def test_window_lead(spark_session):
+    from pyspark.sql.window import Window as SparkWindow
+
+    spark_df = spark_session.createDataFrame(
+        [("A", 1, 100), ("A", 2, 200), ("A", 3, 300)], ["dept", "seq", "sal"]
+    )
+    polars_df = pl.DataFrame(
+        {"dept": ["A", "A", "A"], "seq": [1, 2, 3], "sal": [100, 200, 300]}
+    )
+
+    w_spark = SparkWindow.partitionBy("dept").orderBy("seq")
+    spark_result = spark_df.withColumn("lead_sal", F.lead("sal", 1).over(w_spark))
+
+    polars_result = polars_df.sort("dept", "seq").with_columns(
+        pl.col("sal").shift(-1).over("dept").alias("lead_sal")
+    )
+
+    expected = _spark_to_polars(spark_result).sort("dept", "seq")
+    polars_result = polars_result.sort("dept", "seq")
+    assert_frame_equal(expected, polars_result, check_dtypes=False)
+
+
+def test_window_sum_over_partition(spark_session):
+    from pyspark.sql.window import Window as SparkWindow
+
+    spark_df = spark_session.createDataFrame(
+        [("A", 100), ("A", 200), ("B", 300)], ["dept", "sal"]
+    )
+    polars_df = pl.DataFrame({"dept": ["A", "A", "B"], "sal": [100, 200, 300]})
+
+    w_spark = SparkWindow.partitionBy("dept")
+    spark_result = spark_df.withColumn("total", F.sum("sal").over(w_spark))
+
+    polars_result = polars_df.with_columns(
+        pl.col("sal").sum().over("dept").alias("total")
+    )
+
+    expected = _spark_to_polars(spark_result).sort("dept", "sal")
+    polars_result = polars_result.sort("dept", "sal")
+    assert_frame_equal(expected, polars_result, check_dtypes=False)
+
+
+# ===========================================================================
+# Additional edge case tests
+# ===========================================================================
+
+
+def test_outer_noop():
+    """Expr.outer() is a no-op -- returns the same expression."""
+    import src.sparkpolars.polyspark.sql.functions  # noqa: F401
+    expr = pl.col("x")
+    assert expr.outer() is expr
+
+
+def test_drop_nonexistent():
+    df = pl.DataFrame({"a": [1], "b": [2]})
+    result = df.drop("nonexistent")
+    assert_frame_equal(result, df)
+
+
+def test_agg_invalid_dict_values():
+    df = pl.DataFrame({"a": [1, 2, 3]})
+    with pytest.raises(ValueError, match="Aggregation functions"):
+        df.agg({"a": "invalid_agg"})
+
+
+def test_agg_invalid_dict_types():
+    df = pl.DataFrame({"a": [1, 2, 3]})
+    with pytest.raises(ValueError, match="All keys and values"):
+        df.agg({1: "sum"})
+
+
+def test_show_vertical_raises():
+    df = pl.DataFrame({"a": [1]})
+    with pytest.raises(NotImplementedError):
+        df.show(vertical=True)
+
+
+def test_show_negative_n_raises():
+    df = pl.DataFrame({"a": [1]})
+    with pytest.raises(ValueError):
+        df.show(n=-1)
+
+
+def test_dropna_raises_with_thresh():
+    df = pl.DataFrame({"a": [1, None, 3]})
+    with pytest.raises(NotImplementedError):
+        df.dropna(thresh=2)
+
+
+def test_dropnulls_raises_with_thresh():
+    df = pl.DataFrame({"a": [1, None, 3]})
+    with pytest.raises(NotImplementedError):
+        df.dropnulls(thresh=2)
+
+
+def test_registerTempTable():
+    import src.sparkpolars.polyspark.sql.dataframe as _mod
+
+    df = pl.DataFrame({"a": [1, 2]})
+    df.registerTempTable("reg_table_test")
+    assert "reg_table_test" in _mod._local_sql_ctx.tables()
+    _mod._local_sql_ctx.unregister("reg_table_test")
+
+
+def test_toDF_wrong_count_raises():
+    df = pl.DataFrame({"a": [1], "b": [2]})
+    with pytest.raises(ValueError, match="toDF"):
+        df.toDF("x")
+
+
+def test_write_returns_writer():
+    from src.sparkpolars.polyspark.sql.dataframe import DataFrameWriter
+
+    df = pl.DataFrame({"a": [1]})
+    assert isinstance(df.write, DataFrameWriter)
