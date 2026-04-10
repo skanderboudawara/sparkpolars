@@ -24,6 +24,11 @@ from src.sparkpolars.polyspark.sql.window import Window as PolyWindow
 # helpers
 # ---------------------------------------------------------------------------
 
+def _spark_to_polars(spark_df):
+    """Convert a Spark DataFrame to Polars via the sparkpolars bridge."""
+    return spark_df.toPolars()
+
+
 def compare_spark_polars(spark_df, polars_df, sort_by=None, check_dtypes=False):
     """Convert Spark DF to Polars via sparkpolars.toPolars() and assert equal."""
     spark_as_polars = spark_df.toPolars()
@@ -132,7 +137,7 @@ def test_sf_left(spark_session):
     polars_df = pl.DataFrame({"s": ["hello"]})
     compare_spark_polars(
         spark_df.select(F.expr("left(s, 3) as s")),
-        polars_df.select(sf.left(pl.col("s"), 3)),
+        polars_df.select(sf.left(pl.col("s"), 3).alias("s")),
     )
 
 
@@ -141,7 +146,7 @@ def test_sf_right(spark_session):
     polars_df = pl.DataFrame({"s": ["hello"]})
     compare_spark_polars(
         spark_df.select(F.expr("right(s, 3) as s")),
-        polars_df.select(sf.right(pl.col("s"), 3)),
+        polars_df.select(sf.right(pl.col("s"), 3).alias("s")),
     )
 
 
@@ -159,7 +164,7 @@ def test_sf_locate(spark_session):
     polars_df = pl.DataFrame({"s": ["hello"]})
     compare_spark_polars(
         spark_df.select(F.locate("ll", "s").alias("s")),
-        polars_df.select(sf.locate("ll", pl.col("s"))),
+        polars_df.select(sf.locate("ll", pl.col("s")).alias("s")),
     )
 
 
@@ -168,7 +173,7 @@ def test_sf_repeat(spark_session):
     polars_df = pl.DataFrame({"s": ["ab"]})
     compare_spark_polars(
         spark_df.select(F.expr("repeat(s, 3) as s")),
-        polars_df.select(sf.repeat(pl.col("s"), 3)),
+        polars_df.select(sf.repeat(pl.col("s"), 3).alias("s")),
     )
 
 
@@ -222,7 +227,7 @@ def test_sf_instr(spark_session):
     polars_df = pl.DataFrame({"s": ["hello"]})
     compare_spark_polars(
         spark_df.select(F.instr("s", "ll").alias("s")),
-        polars_df.select(sf.instr(pl.col("s"), "ll")),
+        polars_df.select(sf.instr(pl.col("s"), "ll").alias("s")),
     )
 
 
@@ -231,7 +236,7 @@ def test_sf_split_part(spark_session):
     polars_df = pl.DataFrame({"s": ["a-b-c"]})
     compare_spark_polars(
         spark_df.select(F.expr("split_part(s, '-', 2) as s")),
-        polars_df.select(sf.split_part(pl.col("s"), "-", 2)),
+        polars_df.select(sf.split_part(pl.col("s"), "-", 2).alias("s")),
     )
 
 
@@ -240,7 +245,7 @@ def test_sf_substring_index(spark_session):
     polars_df = pl.DataFrame({"s": ["a.b.c"]})
     compare_spark_polars(
         spark_df.select(F.substring_index("s", ".", 2).alias("s")),
-        polars_df.select(sf.substring_index(pl.col("s"), ".", 2)),
+        polars_df.select(sf.substring_index(pl.col("s"), ".", 2).alias("s")),
     )
 
 
@@ -249,7 +254,7 @@ def test_sf_contains(spark_session):
     polars_df = pl.DataFrame({"s": ["hello", "world"]})
     compare_spark_polars(
         spark_df.select(F.col("s").contains("llo").alias("s")),
-        polars_df.select(sf.contains(pl.col("s"), "llo")),
+        polars_df.select(sf.contains(pl.col("s"), "llo").alias("s")),
     )
 
 
@@ -267,7 +272,7 @@ def test_sf_unbase64(spark_session):
     polars_df = pl.DataFrame({"s": ["aGVsbG8="]})
     compare_spark_polars(
         spark_df.select(F.decode(F.unbase64("s"), "utf-8").alias("s")),
-        polars_df.select(sf.unbase64(pl.col("s"))),
+        polars_df.select(sf.unbase64(pl.col("s")).alias("s")),
     )
 
 
@@ -303,7 +308,7 @@ def test_sf_regexp_count(spark_session):
     polars_df = pl.DataFrame({"s": ["hello"]})
     compare_spark_polars(
         spark_df.select(F.expr("regexp_count(s, 'l') as s")),
-        polars_df.select(sf.regexp_count(pl.col("s"), "l")),
+        polars_df.select(sf.regexp_count(pl.col("s"), "l").alias("s")),
     )
 
 
@@ -312,7 +317,7 @@ def test_sf_regexp_extract(spark_session):
     polars_df = pl.DataFrame({"s": ["2023-01-15"]})
     compare_spark_polars(
         spark_df.select(F.regexp_extract("s", r"(\d{4})", 1).alias("s")),
-        polars_df.select(sf.regexp_extract(pl.col("s"), r"(\d{4})", 1)),
+        polars_df.select(sf.regexp_extract(pl.col("s"), r"(\d{4})", 1).alias("s")),
     )
 
 
@@ -321,7 +326,7 @@ def test_sf_regexp_like(spark_session):
     polars_df = pl.DataFrame({"s": ["hello", "world"]})
     compare_spark_polars(
         spark_df.select(F.expr("regexp_like(s, '^h') as s")),
-        polars_df.select(sf.regexp_like(pl.col("s"), "^h")),
+        polars_df.select(sf.regexp_like(pl.col("s"), "^h").alias("s")),
     )
 
 
@@ -330,7 +335,7 @@ def test_sf_regexp(spark_session):
     polars_df = pl.DataFrame({"s": ["hello"]})
     compare_spark_polars(
         spark_df.select(F.expr("regexp_like(s, 'hel') as s")),
-        polars_df.select(sf.regexp(pl.col("s"), "hel")),
+        polars_df.select(sf.regexp(pl.col("s"), "hel").alias("s")),
     )
 
 
@@ -339,7 +344,7 @@ def test_sf_regexp_substr(spark_session):
     polars_df = pl.DataFrame({"s": ["abc123"]})
     compare_spark_polars(
         spark_df.select(F.regexp_extract("s", r"(\d+)", 1).alias("s")),
-        polars_df.select(sf.regexp_substr(pl.col("s"), r"\d+")),
+        polars_df.select(sf.regexp_substr(pl.col("s"), r"\d+").alias("s")),
     )
 
 
@@ -348,7 +353,7 @@ def test_sf_regexp_instr(spark_session):
     polars_df = pl.DataFrame({"s": ["abcabc", "xyz"]})
     compare_spark_polars(
         spark_df.select(F.expr("regexp_instr(s, 'b') as s")),
-        polars_df.select(sf.regexp_instr(pl.col("s"), "b")),
+        polars_df.select(sf.regexp_instr(pl.col("s"), "b").alias("s")),
     )
 
 
@@ -366,7 +371,7 @@ def test_sf_overlay(spark_session):
     polars_df = pl.DataFrame({"s": ["hello"]})
     compare_spark_polars(
         spark_df.select(F.overlay("s", F.lit("XY"), 2, 3).alias("s")),
-        polars_df.select(sf.overlay(pl.col("s"), "XY", 2, 3)),
+        polars_df.select(sf.overlay(pl.col("s"), "XY", 2, 3).alias("s")),
     )
 
 
@@ -375,7 +380,7 @@ def test_sf_chr(spark_session):
     polars_df = pl.DataFrame({"c": [65]})
     compare_spark_polars(
         spark_df.select(F.expr("chr(c) as c")),
-        polars_df.select(sf.chr(pl.col("c"))),
+        polars_df.select(sf.chr(pl.col("c")).alias("c")),
     )
 
 
@@ -384,7 +389,7 @@ def test_sf_find_in_set(spark_session):
     polars_df = pl.DataFrame({"s": ["b"], "arr": ["a,b,c"]})
     compare_spark_polars(
         spark_df.select(F.expr("find_in_set(s, arr) as s")),
-        polars_df.select(sf.find_in_set(pl.col("s"), pl.col("arr"))),
+        polars_df.select(sf.find_in_set(pl.col("s"), pl.col("arr")).alias("s")),
     )
 
 
@@ -438,7 +443,7 @@ def test_sf_url_encode(spark_session):
     polars_df = pl.DataFrame({"s": ["hello world"]})
     compare_spark_polars(
         spark_df.select(F.expr("url_encode(s) as s")),
-        polars_df.select(sf.url_encode(pl.col("s"))),
+        polars_df.select(sf.url_encode(pl.col("s")).alias("s")),
     )
 
 
@@ -447,7 +452,7 @@ def test_sf_url_decode(spark_session):
     polars_df = pl.DataFrame({"s": ["hello+world"]})
     compare_spark_polars(
         spark_df.select(F.expr("url_decode(s) as s")),
-        polars_df.select(sf.url_decode(pl.col("s"))),
+        polars_df.select(sf.url_decode(pl.col("s")).alias("s")),
     )
 
 
@@ -456,7 +461,7 @@ def test_sf_format_number(spark_session):
     polars_df = pl.DataFrame({"x": [1234.5678]})
     # Spark adds comma grouping (1,234.57), polyspark doesn't — compare without commas
     spark_r = spark_df.select(F.format_number("x", 2).alias("x")).toPandas().pipe(pl.from_pandas)
-    polars_r = polars_df.select(sf.format_number(pl.col("x"), 2))
+    polars_r = polars_df.select(sf.format_number(pl.col("x"), 2).alias("x"))
     spark_r = spark_r.with_columns(pl.col("x").str.replace(",", ""))
     assert_frame_equal(spark_r, polars_r, check_dtypes=False)
 
@@ -494,7 +499,7 @@ def test_sf_pow(spark_session):
     polars_df = pl.DataFrame({"x": [2.0]})
     compare_spark_polars(
         spark_df.select(F.pow("x", 3).alias("x")),
-        polars_df.select(sf.pow(pl.col("x"), 3)),
+        polars_df.select(sf.pow(pl.col("x"), 3).alias("x")),
     )
 
 
@@ -599,7 +604,7 @@ def test_sf_remainder(spark_session):
     polars_df = pl.DataFrame({"a": [10], "b": [3]})
     compare_spark_polars(
         spark_df.select((F.col("a") % F.col("b")).alias("a")),
-        polars_df.select(sf.remainder(pl.col("a"), pl.col("b"))),
+        polars_df.select(sf.remainder(pl.col("a"), pl.col("b")).alias("a")),
     )
 
 
@@ -608,7 +613,7 @@ def test_sf_gcd(spark_session):
     polars_df = pl.DataFrame({"a": [12], "b": [8]})
     compare_spark_polars(
         spark_df.select(F.expr("gcd(a, b) as a")),
-        polars_df.select(sf.gcd(pl.col("a"), pl.col("b"))),
+        polars_df.select(sf.gcd(pl.col("a"), pl.col("b")).alias("a")),
     )
 
 
@@ -617,7 +622,7 @@ def test_sf_lcm(spark_session):
     polars_df = pl.DataFrame({"a": [4], "b": [6]})
     compare_spark_polars(
         spark_df.select(F.expr("lcm(a, b) as a")),
-        polars_df.select(sf.lcm(pl.col("a"), pl.col("b"))),
+        polars_df.select(sf.lcm(pl.col("a"), pl.col("b")).alias("a")),
     )
 
 
@@ -626,7 +631,7 @@ def test_sf_bitcount(spark_session):
     polars_df = pl.DataFrame({"x": [7]})
     compare_spark_polars(
         spark_df.select(F.expr("bit_count(x) as x")),
-        polars_df.select(sf.bitcount(pl.col("x"))),
+        polars_df.select(sf.bitcount(pl.col("x")).alias("x")),
     )
 
 
@@ -662,7 +667,7 @@ def test_sf_pmod(spark_session):
     polars_df = pl.DataFrame({"a": [-7], "b": [3]})
     compare_spark_polars(
         spark_df.select(F.pmod("a", F.lit(3)).alias("a")),
-        polars_df.select(sf.pmod(pl.col("a"), 3)),
+        polars_df.select(sf.pmod(pl.col("a"), 3).alias("a")),
     )
 
 
@@ -780,7 +785,7 @@ def test_sf_atan2(spark_session):
     polars_df = pl.DataFrame({"y": [1.0], "x": [1.0]})
     compare_spark_polars(
         spark_df.select(F.atan2("y", "x").alias("y")),
-        polars_df.select(sf.atan2(pl.col("y"), pl.col("x"))),
+        polars_df.select(sf.atan2(pl.col("y"), pl.col("x")).alias("y")),
     )
 
 
@@ -877,7 +882,7 @@ def test_sf_count_distinct(spark_session):
     polars_df = pl.DataFrame({"x": [1, 2, 2, 3]})
     compare_spark_polars(
         spark_df.select(F.countDistinct("x").alias("count_distinct(x)")),
-        polars_df.select(sf.count_distinct(pl.col("x"))),
+        polars_df.select(sf.count_distinct(pl.col("x")).alias("count_distinct(x)")),
     )
 
 
@@ -896,8 +901,8 @@ def test_sf_collect_set(spark_session):
     # Set order is non-deterministic — sort inner lists before comparing
     spark_r = _spark_to_polars(spark_df.select(F.collect_set("x")))
     polars_r = polars_df.select(sf.collect_set(pl.col("x")))
-    spark_r = spark_r.with_columns(pl.col("x").list.sort())
-    polars_r = polars_r.with_columns(pl.col("x").list.sort())
+    spark_r = spark_r.with_columns(pl.col("collect_set(x)").list.sort())
+    polars_r = polars_r.with_columns(pl.col("collect_set(x)").list.sort())
     assert_frame_equal(spark_r, polars_r, check_dtypes=False)
 
 
@@ -936,7 +941,7 @@ def test_sf_count_if(spark_session):
     polars_df = pl.DataFrame({"x": [1, 2, 3, 4]})
     compare_spark_polars(
         spark_df.select(F.count_if(F.col("x") > 2).alias("count_if")),
-        polars_df.select(sf.count_if(pl.col("x") > 2)),
+        polars_df.select(sf.count_if(pl.col("x") > 2).alias("count_if")),
     )
 
 
@@ -975,7 +980,7 @@ def test_sf_greatest(spark_session):
     polars_df = pl.DataFrame({"a": [1], "b": [5], "c": [3]})
     compare_spark_polars(
         spark_df.select(F.greatest("a", "b", "c").alias("a")),
-        polars_df.select(sf.greatest(pl.col("a"), pl.col("b"), pl.col("c"))),
+        polars_df.select(sf.greatest(pl.col("a"), pl.col("b"), pl.col("c")).alias("a")),
     )
 
 
@@ -984,7 +989,7 @@ def test_sf_least(spark_session):
     polars_df = pl.DataFrame({"a": [1], "b": [5], "c": [3]})
     compare_spark_polars(
         spark_df.select(F.least("a", "b", "c").alias("a")),
-        polars_df.select(sf.least(pl.col("a"), pl.col("b"), pl.col("c"))),
+        polars_df.select(sf.least(pl.col("a"), pl.col("b"), pl.col("c")).alias("a")),
     )
 
 
@@ -1036,7 +1041,7 @@ def test_sf_nullif(spark_session):
     polars_df = pl.DataFrame({"x": [1, 2]})
     compare_spark_polars(
         spark_df.select(F.expr("nullif(x, 1) as x")),
-        polars_df.select(sf.nullif(pl.col("x"), 1)),
+        polars_df.select(sf.nullif(pl.col("x"), 1).alias("x")),
     )
 
 
@@ -1056,7 +1061,7 @@ def test_sf_nvl2(spark_session):
     polars_df = pl.DataFrame({"x": [None, 2]}).cast({"x": pl.Int32})
     compare_spark_polars(
         spark_df.select(F.expr("nvl2(x, 99, 0) as x")),
-        polars_df.select(sf.nvl2(pl.col("x"), 99, 0)),
+        polars_df.select(sf.nvl2(pl.col("x"), 99, 0).alias("x")),
     )
 
 
@@ -1081,7 +1086,7 @@ def test_sf_isnotnull(spark_session):
     polars_df = pl.DataFrame({"x": [None, 2]}).cast({"x": pl.Int32})
     compare_spark_polars(
         spark_df.select(F.col("x").isNotNull().alias("x")),
-        polars_df.select(sf.isnotnull(pl.col("x"))),
+        polars_df.select(sf.isnotnull(pl.col("x")).alias("x")),
     )
 
 
@@ -1116,8 +1121,8 @@ def test_sf_array_distinct(spark_session):
     polars_df = pl.DataFrame({"a": [[1, 2, 2, 3]]})
     spark_r = _spark_to_polars(spark_df.select(F.array_distinct("a")))
     polars_r = polars_df.select(sf.array_distinct(pl.col("a")))
-    spark_r = spark_r.with_columns(pl.col("a").list.sort())
-    polars_r = polars_r.with_columns(pl.col("a").list.sort())
+    spark_r = spark_r.with_columns(pl.col("array_distinct(a)").list.sort())
+    polars_r = polars_r.with_columns(pl.col("array_distinct(a)").list.sort())
     assert_frame_equal(spark_r, polars_r, check_dtypes=False)
 
 
@@ -1162,8 +1167,8 @@ def test_sf_array_intersect(spark_session):
     polars_df = pl.DataFrame({"a": [[1, 2, 3]], "b": [[2, 3, 4]]})
     spark_r = _spark_to_polars(spark_df.select(F.array_intersect("a", "b")))
     polars_r = polars_df.select(sf.array_intersect(pl.col("a"), pl.col("b")))
-    spark_r = spark_r.with_columns(pl.col("a").list.sort())
-    polars_r = polars_r.with_columns(pl.col("a").list.sort())
+    spark_r = spark_r.with_columns(pl.col("array_intersect(a, b)").list.sort())
+    polars_r = polars_r.with_columns(pl.col("array_intersect(a, b)").list.sort())
     assert_frame_equal(spark_r, polars_r, check_dtypes=False)
 
 
@@ -1172,8 +1177,8 @@ def test_sf_array_union(spark_session):
     polars_df = pl.DataFrame({"a": [[1, 2]], "b": [[2, 3]]})
     spark_r = _spark_to_polars(spark_df.select(F.array_union("a", "b")))
     polars_r = polars_df.select(sf.array_union(pl.col("a"), pl.col("b")))
-    spark_r = spark_r.with_columns(pl.col("a").list.sort())
-    polars_r = polars_r.with_columns(pl.col("a").list.sort())
+    spark_r = spark_r.with_columns(pl.col("array_union(a, b)").list.sort())
+    polars_r = polars_r.with_columns(pl.col("array_union(a, b)").list.sort())
     assert_frame_equal(spark_r, polars_r, check_dtypes=False)
 
 
@@ -1216,7 +1221,7 @@ def test_sf_cardinality(spark_session):
 def test_sf_array_sort(spark_session):
     spark_df = spark_session.createDataFrame([([3, 1, 2],)], "a: array<int>")
     polars_df = pl.DataFrame({"a": [[3, 1, 2]]})
-    compare_spark_polars(spark_df.select(F.array_sort("a")), polars_df.select(sf.array_sort(pl.col("a"))))
+    compare_spark_polars(spark_df.select(F.array_sort("a").alias("a")), polars_df.select(sf.array_sort(pl.col("a")).alias("a")))
 
 
 def test_sf_sort_array(spark_session):
@@ -1370,7 +1375,7 @@ def test_sf_weekday(spark_session):
     polars_df = pl.DataFrame({"d": [datetime.date(2023, 6, 15)]})
     compare_spark_polars(
         spark_df.select(F.expr("weekday(d) as d")),
-        polars_df.select(sf.weekday(pl.col("d"))),
+        polars_df.select(sf.weekday(pl.col("d")).alias("d")),
     )
 
 
@@ -1399,7 +1404,7 @@ def test_sf_datediff(spark_session):
     polars_df = pl.DataFrame({"a": [datetime.date(2023, 6, 20)], "b": [datetime.date(2023, 6, 15)]})
     compare_spark_polars(
         spark_df.select(F.datediff("a", "b").alias("a")),
-        polars_df.select(sf.datediff(pl.col("a"), pl.col("b"))),
+        polars_df.select(sf.datediff(pl.col("a"), pl.col("b")).alias("a")),
     )
 
 
@@ -1414,7 +1419,7 @@ def test_sf_date_trunc(spark_session):
     polars_df = pl.DataFrame({"d": [datetime.date(2023, 6, 15)]})
     compare_spark_polars(
         spark_df.select(F.date_trunc("month", "d").cast("date").alias("d")),
-        polars_df.select(sf.date_trunc("month", pl.col("d"))),
+        polars_df.select(sf.date_trunc("month", pl.col("d")).alias("d")),
     )
 
 
@@ -1429,7 +1434,7 @@ def test_sf_date_format(spark_session):
     polars_df = pl.DataFrame({"d": [datetime.date(2023, 6, 15)]})
     compare_spark_polars(
         spark_df.select(F.date_format("d", "yyyy-MM-dd").alias("d")),
-        polars_df.select(sf.date_format(pl.col("d"), "%Y-%m-%d")),
+        polars_df.select(sf.date_format(pl.col("d"), "%Y-%m-%d").alias("d")),
     )
 
 
@@ -1451,7 +1456,7 @@ def test_sf_make_date(spark_session):
     polars_df = pl.DataFrame({"y": [2023], "m": [6], "d": [15]})
     compare_spark_polars(
         spark_df.select(F.make_date("y", "m", "d").alias("d")),
-        polars_df.select(sf.make_date(pl.col("y"), pl.col("m"), pl.col("d"))),
+        polars_df.select(sf.make_date(pl.col("y"), pl.col("m"), pl.col("d")).alias("d")),
     )
 
 
@@ -1460,7 +1465,7 @@ def test_sf_unix_date(spark_session):
     polars_df = pl.DataFrame({"d": [datetime.date(2023, 6, 15)]})
     compare_spark_polars(
         spark_df.select(F.expr("unix_date(d) as d")),
-        polars_df.select(sf.unix_date(pl.col("d"))),
+        polars_df.select(sf.unix_date(pl.col("d")).alias("d")),
     )
 
 
@@ -1483,7 +1488,7 @@ def test_sf_months_between(spark_session):
     polars_df = pl.DataFrame({"a": [datetime.date(2023, 6, 15)], "b": [datetime.date(2023, 1, 15)]})
     compare_spark_polars(
         spark_df.select(F.months_between("a", "b").alias("a")),
-        polars_df.select(sf.months_between(pl.col("a"), pl.col("b"))),
+        polars_df.select(sf.months_between(pl.col("a"), pl.col("b")).alias("a")),
     )
 
 
@@ -1605,7 +1610,7 @@ def test_sf_get_json_object(spark_session):
     polars_df = pl.DataFrame({"j": ['{"name":"Alice"}']})
     compare_spark_polars(
         spark_df.select(F.get_json_object("j", "$.name").alias("j")),
-        polars_df.select(sf.get_json_object(pl.col("j"), "$.name")),
+        polars_df.select(sf.get_json_object(pl.col("j"), "$.name").alias("j")),
     )
 
 
@@ -1627,8 +1632,8 @@ def test_sf_map_keys(spark_session):
     polars_df = pl.DataFrame({"m": [[{"key": "a", "value": "1"}, {"key": "b", "value": "2"}]]})
     spark_r = _spark_to_polars(spark_df.select(F.map_keys("m")))
     polars_r = polars_df.select(sf.map_keys(pl.col("m")))
-    spark_r = spark_r.with_columns(pl.col("m").list.sort())
-    polars_r = polars_r.with_columns(pl.col("m").list.sort())
+    spark_r = spark_r.with_columns(pl.col("map_keys(m)").list.sort())
+    polars_r = polars_r.with_columns(pl.col("map_keys(m)").list.sort())
     assert_frame_equal(spark_r, polars_r, check_dtypes=False)
 
 
@@ -1640,8 +1645,8 @@ def test_sf_map_values(spark_session):
     polars_df = pl.DataFrame({"m": [[{"key": "a", "value": "1"}, {"key": "b", "value": "2"}]]})
     spark_r = _spark_to_polars(spark_df.select(F.map_values("m")))
     polars_r = polars_df.select(sf.map_values(pl.col("m")))
-    spark_r = spark_r.with_columns(pl.col("m").list.sort())
-    polars_r = polars_r.with_columns(pl.col("m").list.sort())
+    spark_r = spark_r.with_columns(pl.col("map_values(m)").list.sort())
+    polars_r = polars_r.with_columns(pl.col("map_values(m)").list.sort())
     assert_frame_equal(spark_r, polars_r, check_dtypes=False)
 
 
@@ -1653,7 +1658,7 @@ def test_sf_map_contains_key(spark_session):
     polars_df = pl.DataFrame({"m": [[{"key": "a", "value": 1}, {"key": "b", "value": 2}]]})
     compare_spark_polars(
         spark_df.select(F.expr("map_contains_key(m, 'a') as m")),
-        polars_df.select(sf.map_contains_key(pl.col("m"), "a")),
+        polars_df.select(sf.map_contains_key(pl.col("m"), "a").alias("m")),
     )
 
 
@@ -1665,8 +1670,8 @@ def test_sf_transform(spark_session):
     spark_df = spark_session.createDataFrame([([1, 2, 3],)], "a: array<int>")
     polars_df = pl.DataFrame({"a": [[1, 2, 3]]})
     compare_spark_polars(
-        spark_df.select(F.transform("a", lambda x: x * 2)),
-        polars_df.select(sf.transform(pl.col("a"), lambda x: x * 2)),
+        spark_df.select(F.transform("a", lambda x: x * 2).alias("a")),
+        polars_df.select(sf.transform(pl.col("a"), lambda x: x * 2).alias("a")),
     )
 
 
@@ -1674,8 +1679,8 @@ def test_sf_filter(spark_session):
     spark_df = spark_session.createDataFrame([([1, 2, 3, 4],)], "a: array<int>")
     polars_df = pl.DataFrame({"a": [[1, 2, 3, 4]]})
     compare_spark_polars(
-        spark_df.select(F.filter("a", lambda x: x > 2)),
-        polars_df.select(sf.filter(pl.col("a"), lambda x: x > 2)),
+        spark_df.select(F.filter("a", lambda x: x > 2).alias("a")),
+        polars_df.select(sf.filter(pl.col("a"), lambda x: x > 2).alias("a")),
     )
 
 
@@ -1683,8 +1688,8 @@ def test_sf_exists(spark_session):
     spark_df = spark_session.createDataFrame([([1, 2, 3],)], "a: array<int>")
     polars_df = pl.DataFrame({"a": [[1, 2, 3]]})
     compare_spark_polars(
-        spark_df.select(F.exists("a", lambda x: x > 2)),
-        polars_df.select(sf.exists(pl.col("a"), lambda x: x > 2)),
+        spark_df.select(F.exists("a", lambda x: x > 2).alias("a")),
+        polars_df.select(sf.exists(pl.col("a"), lambda x: x > 2).alias("a")),
     )
 
 
@@ -1692,8 +1697,8 @@ def test_sf_forall(spark_session):
     spark_df = spark_session.createDataFrame([([1, 2, 3],)], "a: array<int>")
     polars_df = pl.DataFrame({"a": [[1, 2, 3]]})
     compare_spark_polars(
-        spark_df.select(F.forall("a", lambda x: x > 0)),
-        polars_df.select(sf.forall(pl.col("a"), lambda x: x > 0)),
+        spark_df.select(F.forall("a", lambda x: x > 0).alias("a")),
+        polars_df.select(sf.forall(pl.col("a"), lambda x: x > 0).alias("a")),
     )
 
 
@@ -1833,7 +1838,7 @@ def test_sf_corr(spark_session):
     polars_df = pl.DataFrame({"a": [1.0, 2.0, 3.0], "b": [2.0, 4.0, 6.0]})
     compare_spark_polars(
         spark_df.select(F.corr("a", "b").alias("a")),
-        polars_df.select(sf.corr(pl.col("a"), pl.col("b"))),
+        polars_df.select(sf.corr(pl.col("a"), pl.col("b")).alias("a")),
     )
 
 
@@ -1842,7 +1847,7 @@ def test_sf_covar_samp(spark_session):
     polars_df = pl.DataFrame({"a": [1.0, 2.0, 3.0], "b": [2.0, 4.0, 6.0]})
     compare_spark_polars(
         spark_df.select(F.covar_samp("a", "b").alias("a")),
-        polars_df.select(sf.covar_samp(pl.col("a"), pl.col("b"))),
+        polars_df.select(sf.covar_samp(pl.col("a"), pl.col("b")).alias("a")),
     )
 
 
@@ -1851,7 +1856,7 @@ def test_sf_covar_pop(spark_session):
     polars_df = pl.DataFrame({"a": [1.0, 2.0, 3.0], "b": [2.0, 4.0, 6.0]})
     compare_spark_polars(
         spark_df.select(F.covar_pop("a", "b").alias("a")),
-        polars_df.select(sf.covar_pop(pl.col("a"), pl.col("b"))),
+        polars_df.select(sf.covar_pop(pl.col("a"), pl.col("b")).alias("a")),
     )
 
 
